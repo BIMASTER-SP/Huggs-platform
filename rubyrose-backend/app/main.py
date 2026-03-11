@@ -398,7 +398,7 @@ def _process_nfe(nfe_data: dict, source: str = "manual", user_email: Optional[st
 # ============================================================
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": app.version}
 
 
 # ============================================================
