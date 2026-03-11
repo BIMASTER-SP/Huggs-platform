@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
-import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity } from 'lucide-react'
+import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity, BookOpen, ExternalLink } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -60,6 +60,7 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [orderSuccess, setOrderSuccess] = useState<any>(null)
+  const [catalogTab, setCatalogTab] = useState<'produtos' | 'interativo'>('produtos')
   // Admin state
   const [adminStats, setAdminStats] = useState<any>(null)
   const [adminUsers, setAdminUsers] = useState<any[]>([])
@@ -441,57 +442,95 @@ function App() {
     const filtered = searchQuery ? catalog.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())) : catalog
     return (
       <div className="animate-fade-in">
-        <div className="bg-pink-600 px-4 pt-4 pb-5">
+        <div className="bg-pink-600 px-4 pt-4 pb-3">
           <h2 className="text-white font-bold text-lg mb-3">Catalogo de Produtos</h2>
-          <div className="relative">
-            <input type="text" placeholder="Buscar produtos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              className="w-full py-3 pl-4 pr-10 bg-white/20 rounded-xl text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30" />
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+          {/* Tab toggle: Produtos / Catalogo Interativo */}
+          <div className="flex gap-2 mb-2">
+            <button onClick={() => setCatalogTab('produtos')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${catalogTab === 'produtos' ? 'bg-white text-pink-600' : 'bg-white/20 text-white/80'}`}>
+              <ShoppingBag className="w-4 h-4" /> Produtos
+            </button>
+            <button onClick={() => setCatalogTab('interativo')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${catalogTab === 'interativo' ? 'bg-white text-pink-600' : 'bg-white/20 text-white/80'}`}>
+              <BookOpen className="w-4 h-4" /> Catalogo Interativo
+            </button>
           </div>
+          {catalogTab === 'produtos' && (
+            <div className="relative">
+              <input type="text" placeholder="Buscar produtos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                className="w-full py-3 pl-4 pr-10 bg-white/20 rounded-xl text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30" />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+            </div>
+          )}
         </div>
 
-        {/* Categories */}
-        <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
-          {categories.map(c => (
-            <button key={c} onClick={() => { setSelectedCategory(c); fetchCatalog(c) }}
-              className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${c === selectedCategory ? 'bg-pink-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{c}</button>
-          ))}
-        </div>
-
-        {/* Products grid */}
-        <div className="px-4 pb-4 grid grid-cols-2 gap-3">
-          {filtered.map(p => {
-            const inCart = cart.find(i => i.product_id === p.id)
-            return (
-              <div key={p.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                <div className="h-28 bg-gradient-to-br from-pink-50 to-rose-50 flex items-center justify-center">
-                  <ShoppingBag className="w-10 h-10 text-pink-300" />
-                </div>
-                <div className="p-3">
-                  <p className="text-xs font-medium text-gray-800 line-clamp-2 h-8">{p.name}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{p.category}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <div>
-                      <p className="text-sm font-bold text-pink-600">R${p.price.toFixed(2)}</p>
-                      <p className="text-[9px] text-gray-400">Min: {p.min_order} un</p>
-                    </div>
-                    {inCart ? (
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => updateCartQty(p.id, -1)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
-                        <span className="text-xs font-bold w-5 text-center">{inCart.quantity}</span>
-                        <button onClick={() => updateCartQty(p.id, 1)} className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center"><Plus className="w-3 h-3 text-pink-600" /></button>
-                      </div>
-                    ) : (
-                      <button onClick={() => addToCart(p)} className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center">
-                        <Plus className="w-4 h-4 text-white" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+        {catalogTab === 'interativo' ? (
+          /* iPaper Interactive Catalog */
+          <div className="flex flex-col" style={{ height: 'calc(100vh - 180px)' }}>
+            <div className="px-4 py-2 bg-gradient-to-r from-pink-50 to-rose-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-pink-600" />
+                <span className="text-xs font-medium text-gray-700">Catalogo Interativo Ruby Rose - 160 paginas</span>
               </div>
-            )
-          })}
-        </div>
+              <a href="https://viewer.ipaper.io/ruby-rose-br/catalogo-interativo-ruby-rose/" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[10px] text-pink-600 font-medium">
+                Abrir completo <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <iframe
+              src="https://viewer.ipaper.io/ruby-rose-br/catalogo-interativo-ruby-rose/?page=1"
+              className="flex-1 w-full border-0"
+              title="Catalogo Interativo Ruby Rose"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <>
+            {/* Categories */}
+            <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
+              {categories.map(c => (
+                <button key={c} onClick={() => { setSelectedCategory(c); fetchCatalog(c) }}
+                  className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${c === selectedCategory ? 'bg-pink-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{c}</button>
+              ))}
+            </div>
+
+            {/* Products grid */}
+            <div className="px-4 pb-4 grid grid-cols-2 gap-3">
+              {filtered.map(p => {
+                const inCart = cart.find(i => i.product_id === p.id)
+                return (
+                  <div key={p.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    <div className="h-28 bg-gradient-to-br from-pink-50 to-rose-50 flex items-center justify-center">
+                      <ShoppingBag className="w-10 h-10 text-pink-300" />
+                    </div>
+                    <div className="p-3">
+                      <p className="text-xs font-medium text-gray-800 line-clamp-2 h-8">{p.name}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{p.category}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <div>
+                          <p className="text-sm font-bold text-pink-600">R${p.price.toFixed(2)}</p>
+                          <p className="text-[9px] text-gray-400">Min: {p.min_order} un</p>
+                        </div>
+                        {inCart ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => updateCartQty(p.id, -1)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                            <span className="text-xs font-bold w-5 text-center">{inCart.quantity}</span>
+                            <button onClick={() => updateCartQty(p.id, 1)} className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center"><Plus className="w-3 h-3 text-pink-600" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => addToCart(p)} className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center">
+                            <Plus className="w-4 h-4 text-white" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     )
   }
