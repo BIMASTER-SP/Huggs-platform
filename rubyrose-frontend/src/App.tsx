@@ -60,16 +60,16 @@ interface LookupResult {
   points_earned: number
 }
 
-// Store partners data
-const storePartners = [
-  { name: 'Ruby Rose', cashback: '15%', prev: '5%', color: '#E91E63', initials: 'RR' },
-  { name: 'Drogasil', cashback: 'Até 8%', prev: '3%', color: '#00897B', initials: 'DG' },
-  { name: 'Pague Me...', cashback: '5,5%', prev: '2,5%', color: '#E53935', initials: 'PM' },
-  { name: 'Magazine...', cashback: 'Até 10%', prev: '2%', color: '#0091EA', initials: 'ML' },
-  { name: 'Natura', cashback: '10%', prev: '4%', color: '#FF6F00', initials: 'Na' },
-  { name: 'Panvel', cashback: '6%', prev: '3%', color: '#1565C0', initials: 'Pv' },
-  { name: 'Farmacia...', cashback: '4%', prev: '2%', color: '#7B1FA2', initials: 'FS' },
-  { name: 'Beleza Na...', cashback: '7%', prev: '3%', color: '#C2185B', initials: 'BN' },
+// Parceiros Ruby Rose - lojas que vendem produtos da marca
+const parceirosRubyRose = [
+  { name: 'Ruby Rose', cashback: '15%', color: '#C62828', initials: 'RR' },
+  { name: 'Beleza Web', cashback: 'Até 8%', color: '#6A1B9A', initials: 'BW' },
+  { name: 'MakeB Store', cashback: '5,5%', color: '#AD1457', initials: 'MB' },
+  { name: 'GlamShop', cashback: 'Até 10%', color: '#00695C', initials: 'GS' },
+  { name: 'Beauty Box', cashback: '10%', color: '#E65100', initials: 'BB' },
+  { name: 'Rede Farma', cashback: '6%', color: '#0277BD', initials: 'RF' },
+  { name: 'Perfumaria', cashback: '4%', color: '#4527A0', initials: 'PF' },
+  { name: 'Make & Cia', cashback: '7%', color: '#B71C1C', initials: 'MC' },
 ]
 
 function App() {
@@ -108,15 +108,15 @@ function App() {
   ]
   const fallbackCategories = ['Todas', 'Super Cashback', 'Maquiagem', 'Skincare', 'Unhas', 'Acessorios']
   const fallbackOffers = { banners: [
-    { id: 1, title: '100% cashback', subtitle: 'Na primeira compra Ruby Rose', description: 'Valido ate R$30,00', color: 'purple', highlight: true },
-    { id: 2, title: 'Skincare Week', subtitle: 'Ate 30% de cashback', description: 'Valido esta semana', color: 'pink', highlight: false },
-    { id: 3, title: 'Dia da Mulher', subtitle: 'Cashback em dobro', description: '08 de Marco', color: 'rose', highlight: false },
+    { id: 1, title: 'Cashback de Boas-vindas', subtitle: 'Na sua primeira compra Ruby Rose', description: 'Ate R$30 de volta', color: 'purple', highlight: true },
+    { id: 2, title: 'Semana Skincare', subtitle: 'Ate 30% de retorno', description: 'Valido esta semana', color: 'pink', highlight: false },
+    { id: 3, title: 'Especial Beauty', subtitle: 'Pontos em dobro', description: 'Promocao limitada', color: 'rose', highlight: false },
   ]}
   const fallbackServices = [
-    { id: 1, name: 'Jogue e Ganhe', icon: 'gamepad', badge: 'EM DOBRO', badge_color: 'green' },
-    { id: 2, name: 'Ruby Prime', icon: 'diamond', badge: null, badge_color: null },
-    { id: 3, name: 'Sorteios', icon: 'gift', badge: 'NOVIDADE', badge_color: 'pink' },
-    { id: 4, name: 'Indicar Amigos', icon: 'users', badge: null, badge_color: null },
+    { id: 1, name: 'Quiz Beauty', icon: 'gamepad', badge: 'NOVO', badge_color: 'green' },
+    { id: 2, name: 'Clube VIP', icon: 'diamond', badge: null, badge_color: null },
+    { id: 3, name: 'Premios', icon: 'gift', badge: 'ESPECIAL', badge_color: 'pink' },
+    { id: 4, name: 'Convide Amigas', icon: 'users', badge: null, badge_color: null },
   ]
   const fallbackRewards = [
     { id: 1, name: 'Desconto 15% na proxima compra', points_required: 200, type: 'discount', icon: 'percent', available: true },
@@ -186,16 +186,16 @@ function App() {
   const serviceIcons: Record<string, any> = { gamepad: Gamepad2, diamond: Diamond, gift: Gift, users: Users }
   const rewardIcons: Record<string, any> = { percent: Percent, truck: Truck, gift: Gift, 'dollar-sign': DollarSign, star: Star, palette: Sparkles }
 
-  // ========== HOME PAGE (Meliuz-style) ==========
+  // ========== HOME PAGE ==========
   const HomePage = () => (
     <div className="animate-fade-in">
-      {/* Light pink header area */}
-      <div style={{ background: 'linear-gradient(180deg, #FDE4EC 0%, #FFF0F3 60%, #FFFFFF 100%)' }} className="px-4 pt-4 pb-2">
+      {/* Ruby Rose branded header - deep rose to white gradient */}
+      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FCEEF0 50%, #FFFFFF 100%)' }} className="px-4 pt-4 pb-2">
         {/* Search Bar */}
         <div className="relative mb-4">
           <input
             type="text"
-            placeholder="Busque por lojas e produtos"
+            placeholder="Encontre produtos Ruby Rose"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full py-3.5 pl-4 pr-12 bg-white rounded-2xl text-gray-700 text-sm border border-gray-200 shadow-sm focus:outline-none focus:border-pink-300"
@@ -238,9 +238,9 @@ function App() {
         )}
       </div>
 
-      {/* Servicos Ruby Rose */}
+      {/* Mundo Ruby Rose - brand services */}
       <div className="px-4 py-4">
-        <h2 className="text-gray-900 font-bold text-lg mb-4">Servicos Ruby Rose</h2>
+        <h2 className="text-gray-900 font-bold text-lg mb-4">Mundo Ruby Rose</h2>
         <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
           {services.map(s => {
             const Icon = serviceIcons[s.icon] || Gift
@@ -263,9 +263,9 @@ function App() {
 
       <div className="section-divider" />
 
-      {/* Em Alta - Trending Products (horizontal scroll like Meliuz) */}
+      {/* Mais Vendidos - top selling products */}
       <div className="py-4">
-        <h2 className="text-gray-900 font-bold text-lg px-4 mb-4">Em Alta</h2>
+        <h2 className="text-gray-900 font-bold text-lg px-4 mb-4">Mais Vendidos</h2>
         <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
           {filteredProducts.slice(0, 6).map(p => (
             <div key={p.id} className="flex-shrink-0 w-[180px] bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
@@ -304,20 +304,20 @@ function App() {
 
       <div className="section-divider" />
 
-      {/* Ofertas Vip - Store Partners Grid */}
+      {/* Onde Encontrar - Ruby Rose authorized retailers */}
       <div className="py-4">
         <div className="flex items-center justify-between px-4 mb-1">
-          <h2 className="text-gray-900 font-bold text-lg">Ofertas Vip</h2>
-          <span className="text-cyan-600 text-sm font-medium">Abrir todas</span>
+          <h2 className="text-gray-900 font-bold text-lg">Onde Encontrar</h2>
+          <span className="text-rose-600 text-sm font-medium">Ver todas</span>
         </div>
-        <p className="text-gray-500 text-xs px-4 mb-4">Cashback nas maiores lojas online</p>
+        <p className="text-gray-500 text-xs px-4 mb-4">Lojas parceiras com cashback Ruby Rose</p>
 
-        {/* VIP Banner */}
+        {/* Partner Highlight Banner */}
         <div className="px-4 mb-4">
-          <div className="h-40 rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #7B1FA2 0%, #9C27B0 40%, #6A1B9A 100%)' }}>
+          <div className="h-40 rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #880E4F 0%, #C2185B 40%, #AD1457 100%)' }}>
             <div className="p-5 h-full flex flex-col justify-center relative z-10">
-              <p className="text-white/90 text-sm font-medium mb-1">Descontos imperdiveis</p>
-              <p className="text-white text-lg font-bold leading-tight">com os nossos<br/><span className="text-pink-300">parceiros VIPs!</span></p>
+              <p className="text-white/90 text-sm font-medium mb-1">Exclusivo para voce</p>
+              <p className="text-white text-lg font-bold leading-tight">Cashback especial<br/><span className="text-rose-200">nos nossos parceiros</span></p>
             </div>
             <div className="absolute -right-4 -top-4 w-28 h-28 rounded-full bg-white/10" />
             <div className="absolute right-8 bottom-4 w-16 h-16 rounded-full bg-white/10" />
@@ -325,16 +325,15 @@ function App() {
           </div>
         </div>
 
-        {/* Store Grid 4x2 */}
+        {/* Partner Grid 4x2 */}
         <div className="grid grid-cols-4 gap-y-5 gap-x-2 px-4">
-          {storePartners.map((s, i) => (
+          {parceirosRubyRose.map((s, i) => (
             <div key={i} className="flex flex-col items-center">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-1.5 shadow-sm border border-gray-100" style={{ background: s.color + '15' }}>
                 <span className="font-bold text-sm" style={{ color: s.color }}>{s.initials}</span>
               </div>
               <span className="text-[10px] text-gray-600 text-center leading-tight truncate w-full">{s.name}</span>
               <span className="text-xs font-bold text-gray-800">{s.cashback}</span>
-              <span className="text-[9px] text-gray-400">Era {s.prev}</span>
             </div>
           ))}
         </div>
@@ -342,30 +341,30 @@ function App() {
 
       <div className="section-divider" />
 
-      {/* 100% de cashback section */}
+      {/* Promocoes Exclusivas section */}
       <div className="py-4">
-        <h2 className="text-gray-900 font-bold text-lg px-4 mb-4">100% de cashback</h2>
+        <h2 className="text-gray-900 font-bold text-lg px-4 mb-4">Promocoes Exclusivas</h2>
         <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
-          <div className="flex-shrink-0 w-[300px] h-44 rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #1a0533 0%, #2d1654 50%, #1a0533 100%)' }}>
+          <div className="flex-shrink-0 w-[300px] h-44 rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #4A0E2E 0%, #7B1340 50%, #4A0E2E 100%)' }}>
             <div className="p-5 h-full flex flex-col justify-center relative z-10">
-              <p className="text-white/80 text-xs">Primeira compra</p>
-              <p className="text-white text-2xl font-bold">Compre com</p>
-              <p className="text-pink-400 text-3xl font-black">100%</p>
-              <p className="text-white/80 text-sm">de cashback na Ruby Rose</p>
-              <div className="mt-2 bg-pink-500 rounded-full px-4 py-1.5 self-start">
-                <span className="text-white text-xs font-bold">Eu quero!</span>
+              <p className="text-white/80 text-xs">Novos membros</p>
+              <p className="text-white text-2xl font-bold">Cashback total</p>
+              <p className="text-rose-300 text-3xl font-black">na 1a compra</p>
+              <p className="text-white/80 text-sm">Ate R$ 30 de volta</p>
+              <div className="mt-2 bg-rose-600 rounded-full px-4 py-1.5 self-start">
+                <span className="text-white text-xs font-bold">Aproveitar</span>
               </div>
             </div>
-            <div className="absolute right-4 top-4 w-20 h-20 bg-pink-500/20 rounded-full" />
-            <div className="absolute right-12 bottom-6 w-12 h-12 bg-green-500/20 rounded-full" />
+            <div className="absolute right-4 top-4 w-20 h-20 bg-rose-500/20 rounded-full" />
+            <div className="absolute right-12 bottom-6 w-12 h-12 bg-amber-500/20 rounded-full" />
           </div>
-          <div className="flex-shrink-0 w-[300px] h-44 rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #E91E63 0%, #F06292 100%)' }}>
+          <div className="flex-shrink-0 w-[300px] h-44 rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #C62828 0%, #E53935 100%)' }}>
             <div className="p-5 h-full flex flex-col justify-center">
-              <p className="text-white/80 text-xs">Indicar amigos</p>
-              <p className="text-white text-xl font-bold">Ganhe R$ 50</p>
-              <p className="text-white/90 text-sm mt-1">para cada amigo indicado</p>
+              <p className="text-white/80 text-xs">Convide amigas</p>
+              <p className="text-white text-xl font-bold">Ganhe R$ 20</p>
+              <p className="text-white/90 text-sm mt-1">por cada indicacao</p>
               <div className="mt-2 bg-white/20 rounded-full px-4 py-1.5 self-start">
-                <span className="text-white text-xs font-bold">Indicar agora</span>
+                <span className="text-white text-xs font-bold">Convidar</span>
               </div>
             </div>
           </div>
@@ -374,10 +373,10 @@ function App() {
 
       <div className="section-divider" />
 
-      {/* Cupons e Ofertas */}
+      {/* Cupons de Desconto */}
       <div className="py-4">
-        <h2 className="text-gray-900 font-bold text-lg px-4 mb-1">Cupons e Ofertas</h2>
-        <p className="text-gray-500 text-xs px-4 mb-4">Para voce economizar mais!</p>
+        <h2 className="text-gray-900 font-bold text-lg px-4 mb-1">Cupons de Desconto</h2>
+        <p className="text-gray-500 text-xs px-4 mb-4">Ofertas selecionadas para voce</p>
         <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
           {[
             { store: 'Ruby Rose', discount: '20% OFF', code: 'RUBY20' },
@@ -416,8 +415,8 @@ function App() {
       {/* Product Grid */}
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-gray-900 font-bold text-lg">Produtos com cashback</h2>
-          <span className="text-cyan-600 text-sm font-medium">Ver todos</span>
+            <h2 className="text-gray-900 font-bold text-lg">Vitrine Ruby Rose</h2>
+            <span className="text-rose-600 text-sm font-medium">Ver todos</span>
         </div>
         <div className="space-y-3">
           {filteredProducts.slice(0, 4).map(p => (
@@ -447,31 +446,31 @@ function App() {
       {/* Lojas Visitadas */}
       <div className="py-4">
         <div className="flex items-center justify-between px-4 mb-4">
-          <h2 className="text-gray-900 font-bold text-lg">Lojas em destaque</h2>
-          <span className="text-cyan-600 text-sm font-medium">Abrir todas</span>
+          <h2 className="text-gray-900 font-bold text-lg">Parceiros em Alta</h2>
+          <span className="text-rose-600 text-sm font-medium">Ver todos</span>
         </div>
         <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
-          {storePartners.slice(0, 5).map((s, i) => (
-            <div key={i} className="flex-shrink-0 w-[200px] bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: s.color + '15' }}>
-                  <span className="font-bold text-sm" style={{ color: s.color }}>{s.initials}</span>
+            {parceirosRubyRose.slice(0, 5).map((s, i) => (
+              <div key={i} className="flex-shrink-0 w-[200px] bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: s.color + '15' }}>
+                    <span className="font-bold text-sm" style={{ color: s.color }}>{s.initials}</span>
+                  </div>
+                  <div>
+                    <p className="text-gray-800 text-sm font-medium">{s.name}</p>
+                    <p className="text-rose-600 text-xs font-semibold">Ate {s.cashback} cashback</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-800 text-sm font-medium">{s.name}</p>
-                  <p className="text-pink-600 text-xs font-semibold">Ate {s.cashback} cashback</p>
-                </div>
+                <div className="h-0.5 bg-rose-500 rounded-full w-1/3" />
               </div>
-              <div className="h-0.5 bg-pink-500 rounded-full w-1/3" />
-            </div>
-          ))}
+            ))}
         </div>
       </div>
 
       {/* Missoes */}
       <div className="section-divider" />
       <div className="py-4 px-4 pb-6">
-        <h2 className="text-gray-900 font-bold text-lg mb-3">Missoes</h2>
+        <h2 className="text-gray-900 font-bold text-lg mb-3">Desafios da Semana</h2>
         {missions.slice(0, 3).map(m => (
           <div key={m.id} className="bg-white rounded-xl p-3 mb-2 shadow-sm flex items-center gap-3 border border-gray-100">
             <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center">
@@ -499,8 +498,8 @@ function App() {
   // ========== NOTAS PAGE ==========
   const NotasPage = () => (
     <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #FDE4EC 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-1">Minhas Notas</h1>
+      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
+        <h1 className="text-gray-900 font-bold text-xl mb-1">Meus Cupons Fiscais</h1>
         <p className="text-gray-500 text-sm mb-4">Envie seus cupons fiscais e ganhe cashback</p>
         <div className="flex gap-3">
           <div className="flex-1 bg-white rounded-2xl p-4 text-center shadow-sm border border-pink-100">
@@ -685,19 +684,19 @@ function App() {
     </div>
   )
 
-  // ========== JOGOS PAGE ==========
+  // ========== PREMIOS PAGE ==========
   const JogosPage = () => (
     <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #FDE4EC 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-1">Jogue e Ganhe</h1>
-        <p className="text-gray-500 text-sm">Complete desafios e ganhe pontos</p>
+      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
+        <h1 className="text-gray-900 font-bold text-xl mb-1">Ganhe Premios</h1>
+        <p className="text-gray-500 text-sm">Participe e acumule pontos Ruby Rose</p>
       </div>
       <div className="px-4 space-y-3 pb-6">
         {[
-          { name: 'Roleta da Sorte', desc: 'Gire e ganhe ate 500 pontos', pts: 500, icon: Zap, bg: 'from-purple-500 to-purple-700' },
-          { name: 'Quiz Ruby Rose', desc: 'Responda sobre nossos produtos', pts: 200, icon: Star, bg: 'from-pink-500 to-rose-600' },
-          { name: 'Desafio Diario', desc: 'Complete tarefas todo dia', pts: 100, icon: Trophy, bg: 'from-green-500 to-emerald-600' },
-          { name: 'Scratch Card', desc: 'Raspe e descubra seu premio', pts: 300, icon: Gift, bg: 'from-amber-500 to-orange-600' },
+          { name: 'Quiz de Beleza', desc: 'Teste seus conhecimentos de make', pts: 500, icon: Zap, bg: 'from-rose-600 to-rose-800' },
+          { name: 'Avalie Produtos', desc: 'De sua opiniao e ganhe pontos', pts: 200, icon: Star, bg: 'from-pink-500 to-pink-700' },
+          { name: 'Desafio Semanal', desc: 'Complete metas e suba de nivel', pts: 100, icon: Trophy, bg: 'from-amber-500 to-amber-700' },
+          { name: 'Convide Amigas', desc: 'Indique e ganhe pontos extras', pts: 300, icon: Gift, bg: 'from-purple-500 to-purple-700' },
         ].map((g, i) => (
           <div key={i} className={`bg-gradient-to-r ${g.bg} rounded-2xl p-4 flex items-center gap-4 shadow-lg`}>
             <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
@@ -717,12 +716,12 @@ function App() {
     </div>
   )
 
-  // ========== PIX PAGE ==========
+  // ========== RESGATE PAGE ==========
   const PixPage = () => (
     <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #FDE4EC 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-1">Pix</h1>
-        <p className="text-gray-500 text-sm">Resgate seu cashback via Pix</p>
+      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
+        <h1 className="text-gray-900 font-bold text-xl mb-1">Resgate</h1>
+        <p className="text-gray-500 text-sm">Transfira seu cashback para sua conta</p>
       </div>
       <div className="px-4">
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-pink-100 text-center mb-4">
@@ -884,10 +883,10 @@ function App() {
 
   const navItems: { id: Page; label: string; icon: any }[] = [
     { id: 'inicio', label: 'Inicio', icon: Home },
-    { id: 'jogos', label: 'Jogos', icon: Gamepad2 },
-    { id: 'pix', label: 'Pix', icon: Diamond },
-    { id: 'notas', label: 'Notas', icon: Receipt },
-    { id: 'conta', label: 'Conta', icon: DollarSign },
+    { id: 'jogos', label: 'Premios', icon: Gift },
+    { id: 'pix', label: 'Resgatar', icon: DollarSign },
+    { id: 'notas', label: 'Cupons', icon: Receipt },
+    { id: 'conta', label: 'Perfil', icon: User },
   ]
 
   return (
@@ -896,18 +895,18 @@ function App() {
         {pages[page]}
       </div>
 
-      {/* Bottom Navigation - Meliuz style */}
+      {/* Bottom Navigation - Ruby Rose branded */}
       <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 pb-2 pt-1.5 z-40" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
         <div className="flex justify-around">
           {navItems.map(item => (
             <button
               key={item.id}
               onClick={() => setPage(item.id)}
-              className={`flex flex-col items-center py-1 px-3 transition-all ${page === item.id ? 'text-pink-500' : 'text-gray-400'}`}
+              className={`flex flex-col items-center py-1 px-3 transition-all ${page === item.id ? 'text-rose-600' : 'text-gray-400'}`}
             >
-              <item.icon className={`w-5 h-5 ${page === item.id ? 'text-pink-500' : 'text-gray-400'}`} />
-              <span className={`text-[10px] mt-0.5 font-medium ${page === item.id ? 'text-pink-500' : 'text-gray-400'}`}>{item.label}</span>
-              {page === item.id && <div className="w-1 h-1 rounded-full bg-pink-500 mt-0.5" />}
+              <item.icon className={`w-5 h-5 ${page === item.id ? 'text-rose-600' : 'text-gray-400'}`} />
+              <span className={`text-[10px] mt-0.5 font-medium ${page === item.id ? 'text-rose-600' : 'text-gray-400'}`}>{item.label}</span>
+              {page === item.id && <div className="w-1 h-1 rounded-full bg-rose-600 mt-0.5" />}
             </button>
           ))}
         </div>
