@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -168,10 +168,22 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Token invalido")
 
 
-def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[dict]:
-    if credentials is None:
+def _extract_token(credentials: Optional[HTTPAuthorizationCredentials], request: Request) -> Optional[str]:
+    """Extract JWT token from Bearer header or X-Auth-Token custom header.
+    X-Auth-Token is used when Authorization header is occupied by tunnel Basic Auth."""
+    if credentials and credentials.scheme.lower() == 'bearer':
+        return credentials.credentials
+    custom = request.headers.get('x-auth-token')
+    if custom:
+        return custom
+    return None
+
+
+def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), request: Request = None) -> Optional[dict]:
+    token = _extract_token(credentials, request)
+    if token is None:
         return None
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(token)
     email = payload.get("email")
     if not email:
         return None
@@ -181,10 +193,11 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
     return user
 
 
-def require_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    if credentials is None:
+def require_auth(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), request: Request = None) -> dict:
+    token = _extract_token(credentials, request)
+    if token is None:
         raise HTTPException(status_code=401, detail="Autenticacao necessaria")
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(token)
     email = payload.get("email")
     user = users_db.get(email)
     if not user:

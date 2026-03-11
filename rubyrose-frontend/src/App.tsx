@@ -2,13 +2,28 @@ import { useState, useEffect, useCallback } from 'react'
 import './App.css'
 import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Power, Eye, Upload, Wifi, WifiOff } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+// Extract basic auth from URL if present (tunnels use user:pass@host format)
+let API = RAW_API
+let tunnelAuth: string | null = null
+try {
+  const u = new URL(RAW_API)
+  if (u.username) {
+    tunnelAuth = btoa(`${u.username}:${u.password}`)
+    u.username = ''
+    u.password = ''
+    API = u.origin + u.pathname.replace(/\/$/, '')
+  }
+} catch { /* not a valid URL, use as-is */ }
 
 let authToken: string | null = localStorage.getItem('auth_token')
 
 const apiFetch = async (path: string, opts?: RequestInit) => {
   const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> || {}) }
-  if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+  if (tunnelAuth) headers['Authorization'] = `Basic ${tunnelAuth}`
+  if (authToken) headers['X-Auth-Token'] = authToken
+  if (!tunnelAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`
   const res = await fetch(`${API}${path}`, { ...opts, headers })
   if (res.status === 401) {
     authToken = null
@@ -82,8 +97,10 @@ function App() {
   const doLogin = async () => {
     setLoginLoading(true); setLoginError('')
     try {
+      const loginHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (tunnelAuth) loginHeaders['Authorization'] = `Basic ${tunnelAuth}`
       const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: loginHeaders as HeadersInit,
         body: JSON.stringify({ email: loginEmail, password: loginPassword })
       })
       const data = await res.json()
