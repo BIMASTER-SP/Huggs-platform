@@ -14,7 +14,7 @@ import os
 # ============================================================
 # APP SETUP
 # ============================================================
-app = FastAPI(title="Ruby Rose Cashback API", version="2.0.0")
+app = FastAPI(title="Ruby Rose Cashback API", version="2.1.0", description="API completa para sistema de cashback Ruby Rose com autenticacao JWT, LGPD, banners e integracoes")
 
 app.add_middleware(
     CORSMiddleware,
