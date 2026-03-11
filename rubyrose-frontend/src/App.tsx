@@ -832,10 +832,10 @@ function App() {
     if (!adminStats) return <div className="p-6 text-center text-gray-500">Carregando...</div>
     const charts = adminStats.charts || {}
     return (
-    <div className="p-4 lg:p-6 animate-fade-in">
+    <div className="p-4 lg:p-6 animate-fade-in admin-content-area">
       <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><BarChart3 className="w-6 h-6 text-pink-600" />Dashboard Administrativo</h2>
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div className="admin-kpi-grid mb-6">
         {[
           { label: 'Usuarios', value: adminStats.total_users, icon: Users, color: 'bg-pink-50 text-pink-600' },
           { label: 'Pedidos', value: adminStats.total_orders, icon: ShoppingCart, color: 'bg-blue-50 text-blue-600' },
@@ -854,7 +854,7 @@ function App() {
         ))}
       </div>
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div className="admin-charts-grid mb-6">
         {/* Sales by Period - Line Chart */}
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-pink-600" />Vendas por Periodo</h3>
@@ -881,7 +881,7 @@ function App() {
           </ResponsiveContainer>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="admin-charts-grid">
         {/* Top Products - Bar Chart */}
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-purple-600" />Top Produtos</h3>
@@ -1195,7 +1195,7 @@ function App() {
 
   // ========== MAIN LAYOUT ==========
   return (
-    <div className="app-container">
+    <div className={`app-container ${isAdminPage ? 'admin-active' : ''}`}>
       {/* ADMIN SIDEBAR (desktop) */}
       {isAdminPage && (
         <div className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 shadow-sm transition-all duration-300 ${sidebarOpen ? 'w-60' : 'w-16'} hidden lg:flex flex-col`}>

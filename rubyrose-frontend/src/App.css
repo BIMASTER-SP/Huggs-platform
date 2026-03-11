@@ -15,12 +15,95 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   overflow: hidden;
 }
 
+/* Admin pages need full width, not mobile constraint */
+.app-container.admin-active {
+  max-width: 100%;
+}
+
 .main-scroll {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 80px;
+}
+
+/* ========== BOTTOM NAV ========== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: #ffffff;
+  border-top: 1px solid #f3f4f6;
+  padding: 8px 0 env(safe-area-inset-bottom, 8px);
+  z-index: 50;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 12px;
+  color: #9ca3af;
+  transition: color 0.2s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  min-width: 56px;
+}
+
+.nav-item.active {
+  color: #BE185D;
+}
+
+.nav-item:hover {
+  color: #EC4899;
+}
+
+/* ========== ADMIN RESPONSIVE ========== */
+.admin-content-area {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-content-area .admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .admin-content-area .admin-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-content-area .admin-kpi-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.admin-content-area .admin-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .admin-content-area .admin-charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .main-scroll::-webkit-scrollbar { display: none; }

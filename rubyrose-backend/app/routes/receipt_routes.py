@@ -24,7 +24,12 @@ def lookup_cupom(req: CupomLookupRequest):
 
 @router.post("/scan")
 def scan_qrcode(req: QRCodeScanRequest, user: Optional[dict] = Depends(get_current_user)):
-    clean_data = re.sub(r"\D", "", req.qr_data)
+    qr_data = req.qr_data
+    if "chNFe=" in qr_data:
+        match = re.search(r"chNFe=(\d{44})", qr_data)
+        clean_data = match.group(1) if match else re.sub(r"\D", "", qr_data)[:44]
+    else:
+        clean_data = re.sub(r"\D", "", qr_data)[:44]
     if len(clean_data) < 44:
         raise HTTPException(status_code=400, detail="QR Code invalido")
     nfe = simulate_nfe_lookup(clean_data)

@@ -98,6 +98,10 @@ def admin_edit_user(user_id: str, req: AdminEditUserRequest, admin_user: dict = 
     for u in users_db.values():
         if u["id"] == user_id:
             for field, value in req.model_dump(exclude_none=True).items():
+                if field == "role":
+                    valid_roles = ["promotora", "gerente_loja", "vendedor_ruby", "admin"]
+                    if value not in valid_roles:
+                        raise HTTPException(status_code=400, detail=f"Perfil invalido. Use: {', '.join(valid_roles)}")
                 u[field] = value
             log_activity(admin_user["id"], admin_user["name"], "user_edit", f"Usuario editado: {u['name']}")
             return success_response(data={"user": safe_user_response(u)}, message="Usuario atualizado")
