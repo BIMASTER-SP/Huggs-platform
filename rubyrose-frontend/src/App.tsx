@@ -60,7 +60,6 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [orderSuccess, setOrderSuccess] = useState<any>(null)
-  const [catalogTab, setCatalogTab] = useState<'produtos' | 'interativo'>('produtos')
   // Admin state
   const [adminStats, setAdminStats] = useState<any>(null)
   const [adminUsers, setAdminUsers] = useState<any[]>([])
@@ -442,53 +441,34 @@ function App() {
     const filtered = searchQuery ? catalog.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())) : catalog
     return (
       <div className="animate-fade-in">
-        <div className="bg-pink-600 px-4 pt-4 pb-3">
+        <div className="bg-pink-600 px-4 pt-4 pb-5">
           <h2 className="text-white font-bold text-lg mb-3">Catalogo de Produtos</h2>
-          {/* Tab toggle: Produtos / Catalogo Interativo */}
-          <div className="flex gap-2 mb-2">
-            <button onClick={() => setCatalogTab('produtos')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${catalogTab === 'produtos' ? 'bg-white text-pink-600' : 'bg-white/20 text-white/80'}`}>
-              <ShoppingBag className="w-4 h-4" /> Produtos
-            </button>
-            <button onClick={() => setCatalogTab('interativo')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${catalogTab === 'interativo' ? 'bg-white text-pink-600' : 'bg-white/20 text-white/80'}`}>
-              <BookOpen className="w-4 h-4" /> Catalogo Interativo
-            </button>
+          <div className="relative">
+            <input type="text" placeholder="Buscar produtos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              className="w-full py-3 pl-4 pr-10 bg-white/20 rounded-xl text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
           </div>
-          {catalogTab === 'produtos' && (
-            <div className="relative">
-              <input type="text" placeholder="Buscar produtos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                className="w-full py-3 pl-4 pr-10 bg-white/20 rounded-xl text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30" />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
-            </div>
-          )}
         </div>
 
-        {catalogTab === 'interativo' ? (
-          /* iPaper Interactive Catalog */
-          <div className="flex flex-col" style={{ height: 'calc(100vh - 180px)' }}>
-            <div className="px-4 py-2 bg-gradient-to-r from-pink-50 to-rose-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-pink-600" />
-                <span className="text-xs font-medium text-gray-700">Catalogo Interativo Ruby Rose - 160 paginas</span>
+        {/* iPaper Interactive Catalog Button */}
+        <div className="px-4 pt-3">
+          <a href="https://viewer.ipaper.io/ruby-rose-br/catalogo-interativo-ruby-rose/" target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-between w-full px-4 py-3 bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-xl hover:shadow-md transition">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-pink-600" />
               </div>
-              <a href="https://viewer.ipaper.io/ruby-rose-br/catalogo-interativo-ruby-rose/" target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[10px] text-pink-600 font-medium">
-                Abrir completo <ExternalLink className="w-3 h-3" />
-              </a>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Catalogo Interativo</p>
+                <p className="text-[10px] text-gray-500">Ruby Rose - 160 paginas</p>
+              </div>
             </div>
-            <iframe
-              src="https://viewer.ipaper.io/ruby-rose-br/catalogo-interativo-ruby-rose/?page=1"
-              className="flex-1 w-full border-0"
-              title="Catalogo Interativo Ruby Rose"
-              allow="autoplay; fullscreen"
-              allowFullScreen
-            />
-          </div>
-        ) : (
-          <>
-            {/* Categories */}
-            <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
+            <ExternalLink className="w-4 h-4 text-pink-600" />
+          </a>
+        </div>
+
+        {/* Categories */}
+        <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
               {categories.map(c => (
                 <button key={c} onClick={() => { setSelectedCategory(c); fetchCatalog(c) }}
                   className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${c === selectedCategory ? 'bg-pink-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{c}</button>
@@ -528,9 +508,7 @@ function App() {
                   </div>
                 )
               })}
-            </div>
-          </>
-        )}
+        </div>
       </div>
     )
   }

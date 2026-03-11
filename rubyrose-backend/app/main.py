@@ -982,6 +982,8 @@ def export_user_data(user: dict = Depends(require_auth)):
 
 @app.delete("/api/lgpd/data")
 def delete_user_data(user: dict = Depends(require_auth)):
+    if user.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Nao e possivel excluir conta de administrador")
     email = user["email"]
     if email in users_db:
         del users_db[email]
