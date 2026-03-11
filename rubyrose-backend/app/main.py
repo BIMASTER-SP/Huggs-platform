@@ -1283,4 +1283,237 @@ def get_admin_stats(user: dict = Depends(require_admin)):
         "users_by_role": users_by_role, "orders_by_status": orders_by_status,
         "active_banners": len([b for b in banners_db if b["active"]]),
         "total_banners": len(banners_db),
+        "total_stock_entries": len(admin_stock_db),
+        "low_stock_count": len([s for s in admin_stock_db if s["quantity"] <= s.get("low_stock_alert", 10)]),
+        "total_images": len(admin_images_db),
+        "total_integrations": len(admin_integrations_db),
+        "active_integrations": len([ig for ig in admin_integrations_db if ig["active"]]),
     }
+
+
+# ============================================================
+# ADMIN: STOCK MANAGEMENT
+# ============================================================
+admin_stock_db: list[dict] = [
+    {"id": "stock-001", "product_id": 1, "product_name": "Base Liquida HD", "ean": "7896522800012", "quantity": 150, "low_stock_alert": 20, "warehouse": "SP Principal", "last_updated": datetime.now(timezone.utc).isoformat()},
+    {"id": "stock-002", "product_id": 2, "product_name": "Paleta de Sombras 18 Cores", "ean": "7896522800029", "quantity": 8, "low_stock_alert": 15, "warehouse": "SP Principal", "last_updated": datetime.now(timezone.utc).isoformat()},
+    {"id": "stock-003", "product_id": 3, "product_name": "Batom Matte Longa Duracao", "ean": "7896522800036", "quantity": 200, "low_stock_alert": 30, "warehouse": "SP Principal", "last_updated": datetime.now(timezone.utc).isoformat()},
+    {"id": "stock-004", "product_id": 4, "product_name": "Mascara de Cilios Volume", "ean": "7896522800043", "quantity": 5, "low_stock_alert": 10, "warehouse": "RJ Filial", "last_updated": datetime.now(timezone.utc).isoformat()},
+    {"id": "stock-005", "product_id": 5, "product_name": "Po Compacto HD", "ean": "7896522800050", "quantity": 75, "low_stock_alert": 15, "warehouse": "SP Principal", "last_updated": datetime.now(timezone.utc).isoformat()},
+]
+
+
+class AdminStockUpdateRequest(BaseModel):
+    product_id: Optional[int] = None
+    product_name: Optional[str] = None
+    ean: Optional[str] = None
+    quantity: int
+    low_stock_alert: int = 10
+    warehouse: str = "SP Principal"
+
+
+@app.get("/api/admin/stock")
+def admin_list_stock(user: dict = Depends(require_admin)):
+    low_stock = [s for s in admin_stock_db if s["quantity"] <= s.get("low_stock_alert", 10)]
+    return {"total": len(admin_stock_db), "low_stock_count": len(low_stock), "stock": admin_stock_db}
+
+
+@app.post("/api/admin/stock")
+def admin_create_stock(req: AdminStockUpdateRequest, user: dict = Depends(require_admin)):
+    entry = {
+        "id": f"stock-{uuid.uuid4().hex[:8]}", "product_id": req.product_id,
+        "product_name": req.product_name or "", "ean": req.ean or "",
+        "quantity": req.quantity, "low_stock_alert": req.low_stock_alert,
+        "warehouse": req.warehouse, "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+    admin_stock_db.append(entry)
+    log_activity(user["id"], user["name"], "stock_create", f"Estoque criado: {req.product_name}")
+    return {"message": "Registro de estoque criado", "entry": entry}
+
+
+@app.put("/api/admin/stock/{stock_id}")
+def admin_update_stock(stock_id: str, req: AdminStockUpdateRequest, user: dict = Depends(require_admin)):
+    for s in admin_stock_db:
+        if s["id"] == stock_id:
+            s["quantity"] = req.quantity
+            s["low_stock_alert"] = req.low_stock_alert
+            s["warehouse"] = req.warehouse
+            if req.product_name:
+                s["product_name"] = req.product_name
+            s["last_updated"] = datetime.now(timezone.utc).isoformat()
+            log_activity(user["id"], user["name"], "stock_update", f"Estoque atualizado: {s['product_name']} -> {req.quantity}")
+            return {"message": "Estoque atualizado", "entry": s}
+    raise HTTPException(status_code=404, detail="Registro de estoque nao encontrado")
+
+
+@app.delete("/api/admin/stock/{stock_id}")
+def admin_delete_stock(stock_id: str, user: dict = Depends(require_admin)):
+    for i, s in enumerate(admin_stock_db):
+        if s["id"] == stock_id:
+            removed = admin_stock_db.pop(i)
+            log_activity(user["id"], user["name"], "stock_delete", f"Estoque removido: {removed['product_name']}")
+            return {"message": "Registro removido"}
+    raise HTTPException(status_code=404, detail="Registro de estoque nao encontrado")
+
+
+# ============================================================
+# ADMIN: IMAGE MANAGEMENT
+# ============================================================
+admin_images_db: list[dict] = [
+    {"id": "img-001", "name": "Base Liquida HD - Frente", "url": "https://via.placeholder.com/300x300/BE185D/fff?text=Base+HD", "product_id": 1, "product_name": "Base Liquida HD", "type": "produto", "created_at": datetime.now(timezone.utc).isoformat()},
+    {"id": "img-002", "name": "Paleta Sombras - Aberta", "url": "https://via.placeholder.com/300x300/EC4899/fff?text=Paleta+18", "product_id": 2, "product_name": "Paleta de Sombras 18 Cores", "type": "produto", "created_at": datetime.now(timezone.utc).isoformat()},
+    {"id": "img-003", "name": "Banner Home Verao", "url": "https://via.placeholder.com/800x300/BE185D/fff?text=Verao+RR", "product_id": None, "product_name": None, "type": "banner", "created_at": datetime.now(timezone.utc).isoformat()},
+]
+
+
+class AdminImageRequest(BaseModel):
+    name: str
+    url: str
+    product_id: Optional[int] = None
+    product_name: Optional[str] = None
+    type: str = "produto"
+
+
+@app.get("/api/admin/images")
+def admin_list_images(user: dict = Depends(require_admin)):
+    return {"total": len(admin_images_db), "images": admin_images_db}
+
+
+@app.post("/api/admin/images")
+def admin_create_image(req: AdminImageRequest, user: dict = Depends(require_admin)):
+    img = {
+        "id": f"img-{uuid.uuid4().hex[:8]}", "name": req.name, "url": req.url,
+        "product_id": req.product_id, "product_name": req.product_name,
+        "type": req.type, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    admin_images_db.append(img)
+    log_activity(user["id"], user["name"], "image_create", f"Imagem adicionada: {req.name}")
+    return {"message": "Imagem adicionada com sucesso", "image": img}
+
+
+@app.put("/api/admin/images/{image_id}")
+def admin_update_image(image_id: str, req: AdminImageRequest, user: dict = Depends(require_admin)):
+    for img in admin_images_db:
+        if img["id"] == image_id:
+            img["name"] = req.name
+            img["url"] = req.url
+            img["product_id"] = req.product_id
+            img["product_name"] = req.product_name
+            img["type"] = req.type
+            log_activity(user["id"], user["name"], "image_update", f"Imagem atualizada: {req.name}")
+            return {"message": "Imagem atualizada", "image": img}
+    raise HTTPException(status_code=404, detail="Imagem nao encontrada")
+
+
+@app.delete("/api/admin/images/{image_id}")
+def admin_delete_image(image_id: str, user: dict = Depends(require_admin)):
+    for i, img in enumerate(admin_images_db):
+        if img["id"] == image_id:
+            removed = admin_images_db.pop(i)
+            log_activity(user["id"], user["name"], "image_delete", f"Imagem removida: {removed['name']}")
+            return {"message": "Imagem removida"}
+    raise HTTPException(status_code=404, detail="Imagem nao encontrada")
+
+
+# ============================================================
+# ADMIN: INTEGRATIONS / API MANAGEMENT
+# ============================================================
+admin_integrations_db: list[dict] = [
+    {"id": "int-001", "name": "ERP Totvs", "type": "erp", "api_url": "https://api.totvs.com/v1", "api_key": "sk-***...***abc", "description": "Integracao com ERP Totvs para estoque e pedidos", "active": True, "status": "connected", "last_sync": datetime.now(timezone.utc).isoformat()},
+    {"id": "int-002", "name": "Correios API", "type": "logistica", "api_url": "https://api.correios.com.br/v2", "api_key": "cr-***...***xyz", "description": "Rastreamento de entregas via Correios", "active": True, "status": "connected", "last_sync": datetime.now(timezone.utc).isoformat()},
+    {"id": "int-003", "name": "Bling ERP", "type": "erp", "api_url": "https://api.bling.com.br/v3", "api_key": "", "description": "Integracao alternativa com Bling (nao configurada)", "active": False, "status": "disconnected", "last_sync": None},
+]
+
+
+class AdminIntegrationRequest(BaseModel):
+    name: str
+    type: str = "erp"
+    api_url: str = ""
+    api_key: str = ""
+    description: str = ""
+    active: bool = True
+
+
+@app.get("/api/admin/integrations")
+def admin_list_integrations(user: dict = Depends(require_admin)):
+    safe_list = []
+    for ig in admin_integrations_db:
+        safe = {**ig}
+        if safe.get("api_key"):
+            key = safe["api_key"]
+            safe["api_key_masked"] = key[:3] + "***" + key[-3:] if len(key) > 6 else "***"
+        else:
+            safe["api_key_masked"] = ""
+        safe_list.append(safe)
+    return {"total": len(admin_integrations_db), "active": len([i for i in admin_integrations_db if i["active"]]), "integrations": safe_list}
+
+
+@app.post("/api/admin/integrations")
+def admin_create_integration(req: AdminIntegrationRequest, user: dict = Depends(require_admin)):
+    ig = {
+        "id": f"int-{uuid.uuid4().hex[:8]}", "name": req.name, "type": req.type,
+        "api_url": req.api_url, "api_key": req.api_key,
+        "description": req.description, "active": req.active,
+        "status": "connected" if req.active else "disconnected",
+        "last_sync": datetime.now(timezone.utc).isoformat() if req.active else None,
+    }
+    admin_integrations_db.append(ig)
+    log_activity(user["id"], user["name"], "integration_create", f"Integracao criada: {req.name}")
+    return {"message": "Integracao criada com sucesso", "integration": ig}
+
+
+@app.put("/api/admin/integrations/{integration_id}")
+def admin_update_integration(integration_id: str, req: AdminIntegrationRequest, user: dict = Depends(require_admin)):
+    for ig in admin_integrations_db:
+        if ig["id"] == integration_id:
+            ig["name"] = req.name
+            ig["type"] = req.type
+            ig["api_url"] = req.api_url
+            if req.api_key:
+                ig["api_key"] = req.api_key
+            ig["description"] = req.description
+            ig["active"] = req.active
+            ig["status"] = "connected" if req.active else "disconnected"
+            if req.active:
+                ig["last_sync"] = datetime.now(timezone.utc).isoformat()
+            log_activity(user["id"], user["name"], "integration_update", f"Integracao atualizada: {req.name}")
+            return {"message": "Integracao atualizada", "integration": ig}
+    raise HTTPException(status_code=404, detail="Integracao nao encontrada")
+
+
+@app.patch("/api/admin/integrations/{integration_id}/toggle")
+def admin_toggle_integration(integration_id: str, user: dict = Depends(require_admin)):
+    for ig in admin_integrations_db:
+        if ig["id"] == integration_id:
+            ig["active"] = not ig["active"]
+            ig["status"] = "connected" if ig["active"] else "disconnected"
+            if ig["active"]:
+                ig["last_sync"] = datetime.now(timezone.utc).isoformat()
+            st = "ativada" if ig["active"] else "desativada"
+            log_activity(user["id"], user["name"], "integration_toggle", f"Integracao {st}: {ig['name']}")
+            return {"message": f"Integracao {st}", "integration": ig}
+    raise HTTPException(status_code=404, detail="Integracao nao encontrada")
+
+
+@app.delete("/api/admin/integrations/{integration_id}")
+def admin_delete_integration(integration_id: str, user: dict = Depends(require_admin)):
+    for i, ig in enumerate(admin_integrations_db):
+        if ig["id"] == integration_id:
+            removed = admin_integrations_db.pop(i)
+            log_activity(user["id"], user["name"], "integration_delete", f"Integracao removida: {removed['name']}")
+            return {"message": "Integracao removida"}
+    raise HTTPException(status_code=404, detail="Integracao nao encontrada")
+
+
+# ============================================================
+# ADMIN: BANNER TOGGLE (missing endpoint)
+# ============================================================
+@app.patch("/api/admin/banners/{banner_id}/toggle")
+def admin_toggle_banner(banner_id: str, user: dict = Depends(require_admin)):
+    for b in banners_db:
+        if b["id"] == banner_id:
+            b["active"] = not b["active"]
+            st = "ativado" if b["active"] else "desativado"
+            log_activity(user["id"], user["name"], "banner_toggle", f"Banner {st}: {b['title']}")
+            return {"message": f"Banner {st}", "banner": b}
+    raise HTTPException(status_code=404, detail="Banner nao encontrado")

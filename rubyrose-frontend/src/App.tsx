@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
-import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity, BookOpen, ExternalLink } from 'lucide-react'
+import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Power, Eye, Upload, Wifi, WifiOff } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -22,7 +22,7 @@ const apiFetch = async (path: string, opts?: RequestInit) => {
   return res
 }
 
-type Page = 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil' | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders' | 'admin_company' | 'admin_logs'
+type Page = 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil' | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders' | 'admin_company' | 'admin_logs' | 'admin_stock' | 'admin_images' | 'admin_integrations'
 
 interface CartItem {
   product_id: number
@@ -71,6 +71,11 @@ function App() {
   const [editingItem, setEditingItem] = useState<any>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [formData, setFormData] = useState<Record<string, string>>({})
+  // New admin modules state
+  const [adminStock, setAdminStock] = useState<any[]>([])
+  const [adminImages, setAdminImages] = useState<any[]>([])
+  const [adminIntegrations, setAdminIntegrations] = useState<any[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
@@ -159,6 +164,9 @@ function App() {
   const fetchAdminOrders = useCallback(async () => { try { const r = await apiFetch('/api/admin/orders'); setAdminOrders(await r.json()) } catch { } }, [])
   const fetchAdminCompany = useCallback(async () => { try { const r = await apiFetch('/api/admin/company'); setAdminCompany(await r.json()) } catch { } }, [])
   const fetchAdminLogs = useCallback(async () => { try { const r = await apiFetch('/api/admin/logs'); const d = await r.json(); setAdminLogs(d.logs) } catch { } }, [])
+  const fetchAdminStock = useCallback(async () => { try { const r = await apiFetch('/api/admin/stock'); const d = await r.json(); setAdminStock(d.stock) } catch { } }, [])
+  const fetchAdminImages = useCallback(async () => { try { const r = await apiFetch('/api/admin/images'); const d = await r.json(); setAdminImages(d.images) } catch { } }, [])
+  const fetchAdminIntegrations = useCallback(async () => { try { const r = await apiFetch('/api/admin/integrations'); const d = await r.json(); setAdminIntegrations(d.integrations) } catch { } }, [])
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -171,8 +179,9 @@ function App() {
     if (isLoggedIn && user?.role === 'admin' && page.startsWith('admin_')) {
       fetchAdminStats(); fetchAdminUsers(); fetchAdminProducts()
       fetchAdminBanners(); fetchAdminOrders(); fetchAdminCompany(); fetchAdminLogs()
+      fetchAdminStock(); fetchAdminImages(); fetchAdminIntegrations()
     }
-  }, [isLoggedIn, user?.role, page, fetchAdminStats, fetchAdminUsers, fetchAdminProducts, fetchAdminBanners, fetchAdminOrders, fetchAdminCompany, fetchAdminLogs])
+  }, [isLoggedIn, user?.role, page, fetchAdminStats, fetchAdminUsers, fetchAdminProducts, fetchAdminBanners, fetchAdminOrders, fetchAdminCompany, fetchAdminLogs, fetchAdminStock, fetchAdminImages, fetchAdminIntegrations])
 
   useEffect(() => {
     if (dashboard?.banners?.length > 1) {
@@ -979,11 +988,14 @@ function App() {
       {/* Quick nav to admin sections */}
       <div className="mt-4 grid grid-cols-2 gap-3">
         {[
-          { page: 'admin_company' as Page, label: 'Empresa', icon: Settings, desc: 'Configuracoes' },
-          { page: 'admin_users' as Page, label: 'Usuarios', icon: Users, desc: 'Gestao de contas' },
-          { page: 'admin_products' as Page, label: 'Produtos', icon: ShoppingBag, desc: 'Catalogo' },
+          { page: 'admin_products' as Page, label: 'Produtos', icon: ShoppingBag, desc: 'Catalogo e precos' },
+          { page: 'admin_stock' as Page, label: 'Estoque', icon: Database, desc: 'Quantidades e alertas' },
           { page: 'admin_banners' as Page, label: 'Banners', icon: FileText, desc: 'Promocionais' },
+          { page: 'admin_images' as Page, label: 'Imagens', icon: Image, desc: 'Galeria e uploads' },
           { page: 'admin_orders' as Page, label: 'Pedidos', icon: Package, desc: 'Acompanhamento' },
+          { page: 'admin_users' as Page, label: 'Usuarios', icon: Users, desc: 'Gestao de contas' },
+          { page: 'admin_integrations' as Page, label: 'Integracoes', icon: Link2, desc: 'APIs e ERPs' },
+          { page: 'admin_company' as Page, label: 'Empresa', icon: Settings, desc: 'Configuracoes' },
           { page: 'admin_logs' as Page, label: 'Seguranca', icon: Shield, desc: 'Logs e atividades' },
         ].map(item => (
           <button key={item.label} onClick={() => setPage(item.page)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left hover:border-pink-200 transition">
@@ -1393,6 +1405,388 @@ function App() {
   )
 
 
+  // ========== ADMIN STOCK PAGE ==========
+  const AdminStockPage = () => (
+    <div className="animate-fade-in">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Gestao de Estoque</h1>
+          <p className="text-sm text-gray-500 mt-1">Controle de quantidades e alertas de estoque baixo</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => fetchAdminStock()} className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><RefreshCw className="w-4 h-4" />Atualizar</button>
+          <button onClick={() => { setShowCreateForm(true); setFormData({ quantity: '0', low_stock_alert: '10', warehouse: 'SP Principal' }) }} className="px-4 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-2"><Plus className="w-4 h-4" />Novo Registro</button>
+        </div>
+      </div>
+
+      {/* Low stock alert banner */}
+      {adminStock.filter(s => s.quantity <= (s.low_stock_alert || 10)).length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-red-700">Alerta de Estoque Baixo</p>
+            <p className="text-xs text-red-600 mt-1">{adminStock.filter(s => s.quantity <= (s.low_stock_alert || 10)).length} produto(s) com estoque abaixo do minimo</p>
+          </div>
+        </div>
+      )}
+
+      {/* Stock table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Produto</th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">EAN</th>
+              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Quantidade</th>
+              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Alerta Min.</th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Deposito</th>
+              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Status</th>
+              <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Acoes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {adminStock.map((s: Record<string, unknown>) => {
+              const isLow = Number(s.quantity) <= Number(s.low_stock_alert || 10)
+              return (
+                <tr key={String(s.id)} className={`border-b border-gray-100 hover:bg-gray-50 transition ${isLow ? 'bg-red-50/50' : ''}`}>
+                  <td className="py-3 px-4">
+                    <p className="text-sm font-semibold text-gray-800">{String(s.product_name)}</p>
+                    <p className="text-xs text-gray-400">ID: {String(s.product_id)}</p>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-600 font-mono">{String(s.ean)}</td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{String(s.quantity)}</span>
+                  </td>
+                  <td className="py-3 px-4 text-center text-sm text-gray-500">{String(s.low_stock_alert)}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{String(s.warehouse)}</td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${isLow ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{isLow ? 'Baixo' : 'Normal'}</span>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => { setEditingItem({ type: 'stock', ...s }); setFormData({ product_name: String(s.product_name), ean: String(s.ean), quantity: String(s.quantity), low_stock_alert: String(s.low_stock_alert), warehouse: String(s.warehouse) }) }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition" title="Editar"><Edit3 className="w-4 h-4 text-gray-600" /></button>
+                      <button onClick={async () => { if (confirm('Remover este registro de estoque?')) { await adminApiCall(`/api/admin/stock/${s.id}`, 'DELETE'); fetchAdminStock() } }} className="p-2 bg-red-50 rounded-lg hover:bg-red-100 transition" title="Remover"><Trash2 className="w-4 h-4 text-red-600" /></button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {adminStock.length === 0 && <p className="text-center text-gray-400 py-12">Nenhum registro de estoque</p>}
+      </div>
+
+      {/* Create Stock Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-800">Novo Registro de Estoque</h3>
+              <button onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome do produto', 'product_name')}
+            {adminFormField('Codigo EAN', 'ean')}
+            {adminFormField('Quantidade', 'quantity', 'number', '0')}
+            {adminFormField('Alerta de estoque minimo', 'low_stock_alert', 'number', '10')}
+            {adminFormField('Deposito', 'warehouse', 'text', 'SP Principal')}
+            <button onClick={async () => {
+              const d = await adminApiCall('/api/admin/stock', 'POST', { product_name: formData.product_name, ean: formData.ean, quantity: parseInt(formData.quantity) || 0, low_stock_alert: parseInt(formData.low_stock_alert) || 10, warehouse: formData.warehouse || 'SP Principal' })
+              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminStock() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Criar Registro</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Stock Modal */}
+      {editingItem?.type === 'stock' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-800">Editar Estoque</h3>
+              <button onClick={() => setEditingItem(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome do produto', 'product_name')}
+            {adminFormField('Quantidade', 'quantity', 'number')}
+            {adminFormField('Alerta de estoque minimo', 'low_stock_alert', 'number')}
+            {adminFormField('Deposito', 'warehouse')}
+            <button onClick={async () => {
+              const d = await adminApiCall(`/api/admin/stock/${editingItem.id}`, 'PUT', { product_name: formData.product_name, quantity: parseInt(formData.quantity) || 0, low_stock_alert: parseInt(formData.low_stock_alert) || 10, warehouse: formData.warehouse })
+              if (d) { setEditingItem(null); setFormData({}); fetchAdminStock() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Salvar Alteracoes</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // ========== ADMIN IMAGES PAGE ==========
+  const AdminImagesPage = () => (
+    <div className="animate-fade-in">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Gestao de Imagens</h1>
+          <p className="text-sm text-gray-500 mt-1">Upload, preview e associacao de imagens a produtos</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => fetchAdminImages()} className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><RefreshCw className="w-4 h-4" />Atualizar</button>
+          <button onClick={() => { setShowCreateForm(true); setFormData({ type: 'produto' }) }} className="px-4 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-2"><Upload className="w-4 h-4" />Nova Imagem</button>
+        </div>
+      </div>
+
+      {/* Image stats */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center"><Image className="w-5 h-5 text-pink-600" /></div>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{adminImages.length}</p>
+              <p className="text-xs text-gray-500">Total de imagens</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center"><ShoppingBag className="w-5 h-5 text-blue-600" /></div>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{adminImages.filter((i: Record<string, unknown>) => i.type === 'produto').length}</p>
+              <p className="text-xs text-gray-500">Imagens de produtos</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center"><FileText className="w-5 h-5 text-purple-600" /></div>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{adminImages.filter((i: Record<string, unknown>) => i.type === 'banner').length}</p>
+              <p className="text-xs text-gray-500">Imagens de banners</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Image gallery grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {adminImages.map((img: Record<string, unknown>) => (
+          <div key={String(img.id)} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden group">
+            <div className="aspect-square bg-gray-100 relative overflow-hidden">
+              <img src={String(img.url)} alt={String(img.name)} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300/f3f4f6/9ca3af?text=Sem+Imagem' }} />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <div className="flex gap-2">
+                  <button onClick={() => window.open(String(img.url), '_blank')} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50"><Eye className="w-4 h-4 text-gray-700" /></button>
+                  <button onClick={() => { setEditingItem({ type: 'image', ...img }); setFormData({ name: String(img.name), url: String(img.url), product_name: String(img.product_name || ''), img_type: String(img.type || 'produto') }) }} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50"><Edit3 className="w-4 h-4 text-gray-700" /></button>
+                  <button onClick={async () => { if (confirm('Remover esta imagem?')) { await adminApiCall(`/api/admin/images/${img.id}`, 'DELETE'); fetchAdminImages() } }} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50"><Trash2 className="w-4 h-4 text-red-600" /></button>
+                </div>
+              </div>
+            </div>
+            <div className="p-3">
+              <p className="text-sm font-semibold text-gray-800 truncate">{String(img.name)}</p>
+              <div className="flex items-center justify-between mt-1">
+                <span className={`text-xs px-2 py-0.5 rounded-full ${img.type === 'banner' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{String(img.type)}</span>
+                {Boolean(img.product_name) && <span className="text-xs text-gray-400 truncate ml-2">{String(img.product_name)}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {adminImages.length === 0 && <div className="text-center py-16 text-gray-400"><Image className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>Nenhuma imagem cadastrada</p></div>}
+
+      {/* Create Image Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-800">Nova Imagem</h3>
+              <button onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome da imagem', 'name', 'text', 'Ex: Base HD - Frente')}
+            {adminFormField('URL da imagem', 'url', 'url', 'https://...')}
+            {formData.url && (
+              <div className="mb-3 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                <img src={formData.url} alt="Preview" className="w-full h-40 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                <p className="text-xs text-center text-gray-400 py-1">Preview da imagem</p>
+              </div>
+            )}
+            {adminSelectField('Tipo', 'type', [{ value: 'produto', label: 'Produto' }, { value: 'banner', label: 'Banner' }, { value: 'categoria', label: 'Categoria' }])}
+            {adminFormField('Nome do produto (opcional)', 'product_name', 'text', 'Associar a um produto')}
+            <button onClick={async () => {
+              const d = await adminApiCall('/api/admin/images', 'POST', { name: formData.name, url: formData.url, type: formData.type || 'produto', product_name: formData.product_name || null })
+              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminImages() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Upload className="w-4 h-4" />Adicionar Imagem</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Image Modal */}
+      {editingItem?.type === 'image' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-800">Editar Imagem</h3>
+              <button onClick={() => setEditingItem(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome da imagem', 'name')}
+            {adminFormField('URL da imagem', 'url', 'url')}
+            {formData.url && (
+              <div className="mb-3 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                <img src={formData.url} alt="Preview" className="w-full h-40 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              </div>
+            )}
+            {adminSelectField('Tipo', 'img_type', [{ value: 'produto', label: 'Produto' }, { value: 'banner', label: 'Banner' }, { value: 'categoria', label: 'Categoria' }])}
+            {adminFormField('Nome do produto', 'product_name')}
+            <button onClick={async () => {
+              const d = await adminApiCall(`/api/admin/images/${editingItem.id}`, 'PUT', { name: formData.name, url: formData.url, type: formData.img_type || 'produto', product_name: formData.product_name || null })
+              if (d) { setEditingItem(null); setFormData({}); fetchAdminImages() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Salvar Alteracoes</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // ========== ADMIN INTEGRATIONS PAGE ==========
+  const AdminIntegrationsPage = () => (
+    <div className="animate-fade-in">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Integracoes e APIs</h1>
+          <p className="text-sm text-gray-500 mt-1">Gerencie conexoes com ERPs, logistica e servicos externos</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => fetchAdminIntegrations()} className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><RefreshCw className="w-4 h-4" />Atualizar</button>
+          <button onClick={() => { setShowCreateForm(true); setFormData({ type: 'erp', active: 'true' }) }} className="px-4 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-2"><Plus className="w-4 h-4" />Nova Integracao</button>
+        </div>
+      </div>
+
+      {/* Integration stats */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center"><Link2 className="w-5 h-5 text-blue-600" /></div>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{adminIntegrations.length}</p>
+              <p className="text-xs text-gray-500">Total integracoes</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center"><Wifi className="w-5 h-5 text-emerald-600" /></div>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{adminIntegrations.filter((i: Record<string, unknown>) => i.active).length}</p>
+              <p className="text-xs text-gray-500">Ativas</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center"><WifiOff className="w-5 h-5 text-red-600" /></div>
+            <div>
+              <p className="text-2xl font-bold text-gray-800">{adminIntegrations.filter((i: Record<string, unknown>) => !i.active).length}</p>
+              <p className="text-xs text-gray-500">Inativas</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Integration cards */}
+      <div className="space-y-4">
+        {adminIntegrations.map((ig: Record<string, unknown>) => (
+          <div key={String(ig.id)} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${ig.active ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                  {ig.active ? <Wifi className="w-6 h-6 text-emerald-600" /> : <WifiOff className="w-6 h-6 text-gray-400" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-800">{String(ig.name)}</h3>
+                  <p className="text-xs text-gray-500">{String(ig.description)}</p>
+                </div>
+              </div>
+              <span className={`text-xs px-3 py-1 rounded-full font-medium ${ig.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{ig.active ? 'Conectado' : 'Desconectado'}</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-xl p-3 mb-3">
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">Tipo</p>
+                <p className="text-sm font-medium text-gray-700 capitalize">{String(ig.type)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">API URL</p>
+                <p className="text-sm font-medium text-gray-700 truncate">{String(ig.api_url || '—')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">API Key</p>
+                <p className="text-sm font-medium text-gray-700 font-mono">{String(ig.api_key_masked || '—')}</p>
+              </div>
+            </div>
+
+                        {Boolean(ig.last_sync) && (
+                          <p className="text-xs text-gray-400 mb-3">Ultima sincronizacao: {String(ig.last_sync).slice(0, 16).replace('T', ' ')}</p>
+                        )}
+
+            <div className="flex items-center gap-2">
+              <button onClick={async () => { await adminApiCall(`/api/admin/integrations/${ig.id}/toggle`, 'PATCH'); fetchAdminIntegrations() }} className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition ${ig.active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
+                <Power className="w-4 h-4" />{ig.active ? 'Desativar' : 'Ativar'}
+              </button>
+              <button onClick={() => { setEditingItem({ type: 'integration', ...ig }); setFormData({ name: String(ig.name), int_type: String(ig.type), api_url: String(ig.api_url || ''), api_key: '', description: String(ig.description || '') }) }} className="px-4 py-2 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><Edit3 className="w-4 h-4" />Editar</button>
+              <button onClick={async () => { if (confirm('Remover esta integracao?')) { await adminApiCall(`/api/admin/integrations/${ig.id}`, 'DELETE'); fetchAdminIntegrations() } }} className="px-4 py-2 bg-red-50 rounded-xl text-sm text-red-600 hover:bg-red-100 transition flex items-center gap-2"><Trash2 className="w-4 h-4" />Remover</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {adminIntegrations.length === 0 && <div className="text-center py-16 text-gray-400"><Link2 className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>Nenhuma integracao configurada</p></div>}
+
+      {/* Create Integration Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-800">Nova Integracao</h3>
+              <button onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome da integracao', 'name', 'text', 'Ex: ERP Totvs')}
+            {adminSelectField('Tipo', 'type', [{ value: 'erp', label: 'ERP' }, { value: 'logistica', label: 'Logistica' }, { value: 'pagamento', label: 'Pagamento' }, { value: 'notificacao', label: 'Notificacao' }, { value: 'outro', label: 'Outro' }])}
+            {adminFormField('URL da API', 'api_url', 'url', 'https://api.exemplo.com/v1')}
+            {adminFormField('Chave da API (API Key)', 'api_key', 'password', 'sk-...')}
+            {adminFormField('Descricao', 'description', 'text', 'Descreva a integracao')}
+            <button onClick={async () => {
+              const d = await adminApiCall('/api/admin/integrations', 'POST', { name: formData.name, type: formData.type || 'erp', api_url: formData.api_url, api_key: formData.api_key, description: formData.description, active: true })
+              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminIntegrations() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Link2 className="w-4 h-4" />Criar Integracao</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Integration Modal */}
+      {editingItem?.type === 'integration' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-gray-800">Editar Integracao</h3>
+              <button onClick={() => setEditingItem(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome da integracao', 'name')}
+            {adminSelectField('Tipo', 'int_type', [{ value: 'erp', label: 'ERP' }, { value: 'logistica', label: 'Logistica' }, { value: 'pagamento', label: 'Pagamento' }, { value: 'notificacao', label: 'Notificacao' }, { value: 'outro', label: 'Outro' }])}
+            {adminFormField('URL da API', 'api_url', 'url')}
+            {adminFormField('Nova chave da API (deixe vazio para manter)', 'api_key', 'password')}
+            {adminFormField('Descricao', 'description')}
+            <button onClick={async () => {
+              const d = await adminApiCall(`/api/admin/integrations/${editingItem.id}`, 'PUT', { name: formData.name, type: formData.int_type || 'erp', api_url: formData.api_url, api_key: formData.api_key || '', description: formData.description, active: editingItem.active })
+              if (d) { setEditingItem(null); setFormData({}); fetchAdminIntegrations() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Salvar Alteracoes</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+
   // ========== MAIN LAYOUT ==========
   const isAdminPage = page.startsWith('admin_')
 
@@ -1409,24 +1803,110 @@ function App() {
     admin_orders: AdminOrdersPage,
     admin_company: AdminCompanyPage,
     admin_logs: AdminLogsPage,
+    admin_stock: AdminStockPage,
+    admin_images: AdminImagesPage,
+    admin_integrations: AdminIntegrationsPage,
   }
 
-  const navItems: { id: Page; icon: any; label: string }[] = isAdminPage ? [
+  const adminSidebarItems: { id: Page; icon: typeof BarChart3; label: string }[] = [
     { id: 'admin_dash', icon: BarChart3, label: 'Dashboard' },
-    { id: 'admin_users', icon: Users, label: 'Usuarios' },
     { id: 'admin_products', icon: ShoppingBag, label: 'Produtos' },
+    { id: 'admin_stock', icon: Database, label: 'Estoque' },
+    { id: 'admin_banners', icon: FileText, label: 'Banners' },
+    { id: 'admin_images', icon: Image, label: 'Imagens' },
     { id: 'admin_orders', icon: Package, label: 'Pedidos' },
-    { id: 'inicio', icon: Home, label: 'App' },
-  ] : [
+    { id: 'admin_users', icon: Users, label: 'Usuarios' },
+    { id: 'admin_integrations', icon: Link2, label: 'Integracoes' },
+    { id: 'admin_company', icon: Settings, label: 'Empresa' },
+    { id: 'admin_logs', icon: Shield, label: 'Seguranca' },
+  ]
+
+  const mobileNavItems: { id: Page; icon: typeof Home; label: string }[] = [
     { id: 'inicio', icon: Home, label: 'Inicio' },
     { id: 'catalogo', icon: ShoppingCart, label: 'Catalogo' },
     { id: 'pedidos', icon: Package, label: 'Pedidos' },
     { id: 'desafios', icon: Trophy, label: 'Desafios' },
-    ...(isAdmin ? [{ id: 'admin_dash' as Page, icon: Settings, label: 'Admin' }] : [{ id: 'perfil' as Page, icon: User, label: 'Perfil' }]),
+    ...(isAdmin ? [{ id: 'admin_dash' as Page, icon: Settings as typeof Home, label: 'Admin' }] : [{ id: 'perfil' as Page, icon: User as typeof Home, label: 'Perfil' }]),
   ]
 
   const CurrentPage = pages[page] || HomePage
 
+  // ========== DESKTOP ADMIN LAYOUT (sidebar) ==========
+  if (isAdminPage && isAdmin) {
+    return (
+      <div className="admin-layout">
+        {/* Mobile top bar with hamburger */}
+        <div className="admin-topbar">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-pink-700 rounded-lg transition">
+            <Menu className="w-5 h-5 text-white" />
+          </button>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-white" />
+            <span className="text-white font-bold text-base">Ruby Rose Admin</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-white/70 text-xs hidden sm:block">{user?.name}</span>
+            <button onClick={() => setPage('inicio')} className="p-2 hover:bg-pink-700 rounded-lg transition" title="Voltar ao App">
+              <Home className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Sidebar overlay on mobile */}
+        {sidebarOpen && <div className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
+        {/* Sidebar navigation */}
+        <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
+          <div className="p-5 border-b border-pink-700/30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-sm">Ruby Rose</h2>
+                <p className="text-pink-200 text-xs">Painel Administrativo</p>
+              </div>
+            </div>
+          </div>
+
+          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+            {adminSidebarItems.map(item => {
+              const active = page === item.id
+              return (
+                <button key={item.id} onClick={() => { setPage(item.id); if (window.innerWidth < 1024) setSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition ${active ? 'bg-white/20 text-white font-semibold' : 'text-pink-200 hover:bg-white/10 hover:text-white'}`}>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="p-3 border-t border-pink-700/30">
+            <button onClick={() => setPage('inicio')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-pink-200 hover:bg-white/10 hover:text-white transition">
+              <ExternalLink className="w-5 h-5" />
+              <span>Voltar ao App</span>
+            </button>
+            <button onClick={doLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-pink-200 hover:bg-white/10 hover:text-white transition">
+              <LogOut className="w-5 h-5" />
+              <span>Sair</span>
+            </button>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className={`admin-main ${sidebarOpen ? 'shifted' : ''}`}>
+          <div className="admin-content">
+            <CurrentPage />
+          </div>
+        </main>
+
+        {/* Modals & Toast */}
+        <Toast />
+      </div>
+    )
+  }
+
+  // ========== MOBILE APP LAYOUT (unchanged for promotora) ==========
   return (
     <div className="app-container">
       <div className="main-scroll">
@@ -1434,7 +1914,7 @@ function App() {
       </div>
 
       {/* Cart floating button */}
-      {cart.length > 0 && !showCart && !isAdminPage && (
+      {cart.length > 0 && !showCart && (
         <button onClick={() => setShowCart(true)} className="fixed bottom-24 right-4 z-30 bg-pink-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg">
           <ShoppingCart className="w-6 h-6" />
           <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>
@@ -1443,7 +1923,7 @@ function App() {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 px-2 py-1.5 flex items-center justify-around z-20">
-        {navItems.map(item => {
+        {mobileNavItems.map(item => {
           const active = page === item.id
           return (
             <button key={item.id} onClick={() => setPage(item.id)} className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition ${active ? 'text-pink-600' : 'text-gray-400'}`}>

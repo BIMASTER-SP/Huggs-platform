@@ -3,6 +3,7 @@
 html, body, #root { height: 100%; width: 100%; overflow: hidden; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; background: #f5f5f5; }
 
+/* ========== MOBILE APP CONTAINER ========== */
 .app-container {
   max-width: 430px;
   margin: 0 auto;
@@ -45,4 +46,114 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ========== DESKTOP ADMIN LAYOUT ========== */
+.admin-layout {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8f9fb;
+  overflow: hidden;
+}
+
+/* Top bar (visible on all sizes for admin) */
+.admin-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 56px;
+  background: linear-gradient(135deg, #BE185D 0%, #9D174D 100%);
+  flex-shrink: 0;
+  z-index: 40;
+}
+
+/* Sidebar */
+.admin-sidebar {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  bottom: 0;
+  width: 250px;
+  background: linear-gradient(180deg, #9D174D 0%, #831843 100%);
+  display: flex;
+  flex-direction: column;
+  z-index: 35;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  overflow: hidden;
+}
+
+.admin-sidebar.open {
+  transform: translateX(0);
+}
+
+/* Sidebar overlay for mobile */
+.admin-sidebar-overlay {
+  display: none;
+}
+
+/* Main content area */
+.admin-main {
+  flex: 1;
+  margin-top: 0;
+  margin-left: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: margin-left 0.3s ease;
+  height: calc(100vh - 56px);
+}
+
+.admin-content {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Desktop: sidebar always visible, content shifts */
+@media (min-width: 1024px) {
+  .admin-sidebar {
+    transform: translateX(0) !important;
+  }
+
+  .admin-sidebar-overlay {
+    display: none !important;
+  }
+
+  .admin-main {
+    margin-left: 250px;
+  }
+}
+
+/* Tablet & Mobile: sidebar overlays */
+@media (max-width: 1023px) {
+  .admin-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    top: 56px;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 30;
+  }
+
+  .admin-content {
+    padding: 16px;
+  }
+}
+
+/* Scrollbar styling for admin */
+.admin-main::-webkit-scrollbar { width: 6px; }
+.admin-main::-webkit-scrollbar-track { background: transparent; }
+.admin-main::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.admin-main::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* Admin table responsive */
+@media (max-width: 768px) {
+  .admin-content table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }
