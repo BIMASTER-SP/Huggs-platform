@@ -1,1068 +1,1451 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
-import { Search, Home, Gamepad2, Receipt, User, ChevronRight, Star, Gift, Users, Diamond, Trophy, Camera, Keyboard, X, Check, ShoppingBag, Sparkles, Heart, ArrowRight, ScanLine, DollarSign, Percent, Truck, ThumbsUp, Ticket, CreditCard, Zap, Crown, Shield, Trash2, FileText, AlertTriangle } from 'lucide-react'
+import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity } from 'lucide-react'
 
-const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-function parseApiUrl(raw: string): { url: string; headers: Record<string, string> } {
-  try {
-    const u = new URL(raw)
-    if (u.username) {
-      const creds = btoa(`${u.username}:${u.password}`)
-      u.username = ''
-      u.password = ''
-      return { url: u.origin, headers: { 'Authorization': `Basic ${creds}` } }
-    }
-  } catch {}
-  return { url: raw, headers: {} }
-}
-
-const { url: API, headers: AUTH_HEADERS } = parseApiUrl(RAW_API)
+let authToken: string | null = localStorage.getItem('auth_token')
 
 const apiFetch = async (path: string, opts?: RequestInit) => {
-  const merged = { ...opts, headers: { ...AUTH_HEADERS, ...(opts?.headers || {}) } }
-  const res = await fetch(`${API}${path}`, merged)
-  if (!res.ok) throw new Error(`API ${res.status}`)
+  const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> || {}) }
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+  const res = await fetch(`${API}${path}`, { ...opts, headers })
+  if (res.status === 401) {
+    authToken = null
+    localStorage.removeItem('auth_token')
+    window.location.reload()
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Erro de conexao' }))
+    throw new Error(err.detail || `Erro ${res.status}`)
+  }
   return res
 }
 
-const safeJson = async (path: string, fallback: unknown) => {
-  try {
-    const res = await apiFetch(path)
-    return await res.json()
-  } catch {
-    return fallback
-  }
+type Page = 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil' | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders' | 'admin_company' | 'admin_logs'
+
+interface CartItem {
+  product_id: number
+  name: string
+  price: number
+  quantity: number
+  min_order: number
+  image: string
 }
-
-type Page = 'inicio' | 'jogos' | 'pix' | 'notas' | 'conta'
-
-interface ReceiptData {
-  id: string
-  store: { name: string; city: string; state: string; cnpj: string }
-  items: Array<{
-    name: string; quantity: number; unit_price: number; total: number
-    is_ruby_rose: boolean; cashback_percent: number; cashback_value?: number; category?: string
-  }>
-  total_value: number
-  ruby_rose_items: number
-  cashback_total: number
-  points_earned: number
-  submitted_at: string
-  status: string
-  payment_method: string
-}
-
-interface LookupResult {
-  receipt: ReceiptData
-  message: string
-  cashback_earned: number
-  points_earned: number
-}
-
-// Parceiros Ruby Rose - lojas que vendem produtos da marca
-const parceirosRubyRose = [
-  { name: 'Ruby Rose', cashback: '15%', color: '#C62828', initials: 'RR' },
-  { name: 'Beleza Web', cashback: 'Até 8%', color: '#6A1B9A', initials: 'BW' },
-  { name: 'MakeB Store', cashback: '5,5%', color: '#AD1457', initials: 'MB' },
-  { name: 'GlamShop', cashback: 'Até 10%', color: '#00695C', initials: 'GS' },
-  { name: 'Beauty Box', cashback: '10%', color: '#E65100', initials: 'BB' },
-  { name: 'Rede Farma', cashback: '6%', color: '#0277BD', initials: 'RF' },
-  { name: 'Perfumaria', cashback: '4%', color: '#4527A0', initials: 'PF' },
-  { name: 'Make & Cia', cashback: '7%', color: '#B71C1C', initials: 'MC' },
-]
 
 function App() {
   const [page, setPage] = useState<Page>('inicio')
+  const [isLoggedIn, setIsLoggedIn] = useState(!!authToken)
   const [user, setUser] = useState<any>(null)
-  const [products, setProducts] = useState<any[]>([])
+  const [dashboard, setDashboard] = useState<any>(null)
+  const [catalog, setCatalog] = useState<any[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [selectedCategory, setSelectedCategory] = useState('Todas')
-  const [offers, setOffers] = useState<any>({ banners: [] })
-  const [services, setServices] = useState<any[]>([])
-  const [receipts, setReceipts] = useState<ReceiptData[]>([])
-  const [rewards, setRewards] = useState<any[]>([])
-  const [missions, setMissions] = useState<any[]>([])
-  const [showScanner, setShowScanner] = useState(false)
-  const [accessKey, setAccessKey] = useState('')
-  const [scanning, setScanning] = useState(false)
-  const [lookupResult, setLookupResult] = useState<LookupResult | null>(null)
+  const [orders, setOrders] = useState<any[]>([])
+  const [challenges, setChallenges] = useState<any[]>([])
+  const [rewardKits, setRewardKits] = useState<any[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [showCart, setShowCart] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentBanner, setCurrentBanner] = useState(0)
-  const [showLGPDConsent, setShowLGPDConsent] = useState(() => !localStorage.getItem('lgpd_consent'))
-  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [showOrderDetail, setShowOrderDetail] = useState<any>(null)
+  const [showRewardKits, setShowRewardKits] = useState(false)
+  const [showLGPD, setShowLGPD] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
+  const [privacyData, setPrivacyData] = useState<any>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [privacyPolicyData, setPrivacyPolicyData] = useState<any>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [orderSuccess, setOrderSuccess] = useState<any>(null)
+  // Admin state
+  const [adminStats, setAdminStats] = useState<any>(null)
+  const [adminUsers, setAdminUsers] = useState<any[]>([])
+  const [adminProducts, setAdminProducts] = useState<any[]>([])
+  const [adminBanners, setAdminBanners] = useState<any[]>([])
+  const [adminOrders, setAdminOrders] = useState<any>(null)
+  const [adminCompany, setAdminCompany] = useState<any>(null)
+  const [adminLogs, setAdminLogs] = useState<any[]>([])
+  const [editingItem, setEditingItem] = useState<any>(null)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [formData, setFormData] = useState<Record<string, string>>({})
 
-  // Fallback data for when API is unreachable
-  const fallbackUser = { id: 'user-001', name: 'Maria Silva', email: 'maria@email.com', cpf: '***.***.***-45', points: 2850, cashback_balance: 47.90, total_cashback_earned: 234.50, receipts_count: 18, level: 'Ouro' }
-  const fallbackProducts = [
-    { id: 1, name: 'Base Liquida HD Ruby Rose', image: 'base', price: 39.90, cashback_percent: 15, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
-    { id: 2, name: 'Paleta de Sombras 18 Cores', image: 'paleta', price: 49.90, cashback_percent: 20, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 1 },
-    { id: 3, name: 'Batom Matte Longa Duracao', image: 'batom', price: 19.90, cashback_percent: 25, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 3 },
-    { id: 4, name: 'Mascara de Cilios Volume Max', image: 'mascara', price: 29.90, cashback_percent: 10, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
-    { id: 5, name: 'Po Compacto HD', image: 'po', price: 25.90, cashback_percent: 12, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
-    { id: 6, name: 'Primer Facial Hidratante', image: 'primer', price: 34.90, cashback_percent: 18, category: 'Skincare', brand: 'Ruby Rose', max_per_person: 1 },
-    { id: 7, name: 'Serum Vitamina C', image: 'serum', price: 44.90, cashback_percent: 30, category: 'Skincare', brand: 'Ruby Rose', max_per_person: 1 },
-    { id: 8, name: 'Agua Micelar 200ml', image: 'micelar', price: 22.90, cashback_percent: 15, category: 'Skincare', brand: 'Ruby Rose', max_per_person: 2 },
-    { id: 9, name: 'Kit Pinceis Maquiagem 12pcs', image: 'pinceis', price: 59.90, cashback_percent: 20, category: 'Acessorios', brand: 'Ruby Rose', max_per_person: 1 },
-    { id: 10, name: 'Esmalte Gel Ruby Rose', image: 'esmalte', price: 12.90, cashback_percent: 50, category: 'Unhas', brand: 'Ruby Rose', max_per_person: 5 },
-    { id: 11, name: 'Lip Gloss Volumizador', image: 'gloss', price: 24.90, cashback_percent: 22, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
-    { id: 12, name: 'Corretivo Liquido HD', image: 'corretivo', price: 18.90, cashback_percent: 15, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
-  ]
-  const fallbackCategories = ['Todas', 'Super Cashback', 'Maquiagem', 'Skincare', 'Unhas', 'Acessorios']
-  const fallbackOffers = { banners: [
-    { id: 1, title: 'Cashback de Boas-vindas', subtitle: 'Na sua primeira compra Ruby Rose', description: 'Ate R$30 de volta', color: 'purple', highlight: true },
-    { id: 2, title: 'Semana Skincare', subtitle: 'Ate 30% de retorno', description: 'Valido esta semana', color: 'pink', highlight: false },
-    { id: 3, title: 'Especial Beauty', subtitle: 'Pontos em dobro', description: 'Promocao limitada', color: 'rose', highlight: false },
-  ]}
-  const fallbackServices = [
-    { id: 1, name: 'Quiz Beauty', icon: 'gamepad', badge: 'NOVO', badge_color: 'green' },
-    { id: 2, name: 'Clube VIP', icon: 'diamond', badge: null, badge_color: null },
-    { id: 3, name: 'Premios', icon: 'gift', badge: 'ESPECIAL', badge_color: 'pink' },
-    { id: 4, name: 'Convide Amigas', icon: 'users', badge: null, badge_color: null },
-  ]
-  const fallbackRewards = [
-    { id: 1, name: 'Desconto 15% na proxima compra', points_required: 200, type: 'discount', icon: 'percent', available: true },
-    { id: 2, name: 'Frete Gratis', points_required: 300, type: 'shipping', icon: 'truck', available: true },
-    { id: 3, name: 'Kit Miniatura Exclusivo', points_required: 500, type: 'product', icon: 'gift', available: true },
-    { id: 4, name: 'Cashback R$10', points_required: 350, type: 'cashback', icon: 'dollar-sign', available: true },
-    { id: 5, name: 'Sorteio Viagem Spa', points_required: 100, type: 'raffle', icon: 'star', available: true },
-    { id: 6, name: 'Paleta Exclusiva Edicao Limitada', points_required: 1000, type: 'product', icon: 'palette', available: true },
-  ]
-  const fallbackMissions = [
-    { id: 1, name: 'Envie 3 notas fiscais', description: 'Envie 3 cupons fiscais esta semana', points_reward: 100, progress: 1, total: 3, type: 'receipt' },
-    { id: 2, name: 'Compre produtos Skincare', description: 'Compre qualquer produto da linha Skincare', points_reward: 150, progress: 0, total: 1, type: 'purchase' },
-    { id: 3, name: 'Indique um amigo', description: 'Convide um amigo para usar o app', points_reward: 200, progress: 0, total: 1, type: 'referral' },
-  ]
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
-  const acceptLGPDConsent = () => {
-    localStorage.setItem('lgpd_consent', JSON.stringify({ accepted: true, date: new Date().toISOString(), marketing: true, third_party: false }))
-    setShowLGPDConsent(false)
-    // Try to send consent to API
-    apiFetch('/api/lgpd/consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ consent_data_collection: true, consent_marketing: true, consent_third_party: false }) }).catch(() => {})
+  const doLogin = async () => {
+    setLoginLoading(true); setLoginError('')
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Erro no login')
+      authToken = data.token
+      localStorage.setItem('auth_token', data.token)
+      setUser(data.user)
+      setIsLoggedIn(true)
+      if (!localStorage.getItem('lgpd_consent_b2b')) setShowLGPD(true)
+    } catch (e: any) { setLoginError(e.message) }
+    setLoginLoading(false)
   }
 
-  const openPrivacyPolicy = async () => {
-    setShowPrivacyPolicy(true)
-    if (!privacyPolicyData) {
-      try {
-        const res = await apiFetch('/api/lgpd/privacy-policy')
-        setPrivacyPolicyData(await res.json())
-      } catch {
-        setPrivacyPolicyData({ title: 'Politica de Privacidade', version: '1.0', sections: [{ title: 'Carregando...', content: 'Nao foi possivel carregar a politica de privacidade.' }] })
-      }
-    }
+  const doLogout = () => {
+    authToken = null
+    localStorage.removeItem('auth_token')
+    setIsLoggedIn(false); setUser(null); setDashboard(null)
+    setCart([]); setOrders([]); setChallenges([])
   }
 
-  const fetchData = useCallback(async () => {
-    const [u, p, c, o, s, rec, rew, m] = await Promise.all([
-      safeJson('/api/user', fallbackUser),
-      safeJson('/api/products', fallbackProducts),
-      safeJson('/api/categories', fallbackCategories),
-      safeJson('/api/offers', fallbackOffers),
-      safeJson('/api/services', fallbackServices),
-      safeJson('/api/receipts', { receipts: [] }),
-      safeJson('/api/rewards', fallbackRewards),
-      safeJson('/api/missions', fallbackMissions),
-    ])
-    setUser(u); setProducts(p); setCategories(c); setOffers(o)
-    setServices(s); setReceipts(rec.receipts || []); setRewards(rew); setMissions(m)
+  const fetchDashboard = useCallback(async () => {
+    if (!authToken) return
+    try {
+      const res = await apiFetch('/api/dashboard')
+      const d = await res.json()
+      setDashboard(d); setUser(d.user)
+    } catch { }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  const fetchCatalog = useCallback(async (cat?: string) => {
+    try {
+      const q = cat && cat !== 'Todas' ? `?category=${encodeURIComponent(cat)}` : ''
+      const res = await apiFetch(`/api/catalog${q}`)
+      const d = await res.json()
+      setCatalog(d.products)
+    } catch { }
+  }, [])
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/catalog/categories')
+      const d = await res.json()
+      setCategories(d.categories)
+    } catch { }
+  }, [])
+
+  const fetchOrders = useCallback(async () => {
+    if (!authToken) return
+    try {
+      const res = await apiFetch('/api/orders')
+      const d = await res.json()
+      setOrders(d.orders)
+    } catch { }
+  }, [])
+
+  const fetchChallenges = useCallback(async () => {
+    if (!authToken) return
+    try {
+      const res = await apiFetch('/api/challenges')
+      const d = await res.json()
+      setChallenges(d.challenges)
+    } catch { }
+  }, [])
+
+  const fetchRewardKits = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/rewards/kits')
+      const d = await res.json()
+      setRewardKits(d.kits)
+    } catch { }
+  }, [])
+
+  // Admin fetchers
+  const fetchAdminStats = useCallback(async () => { try { const r = await apiFetch('/api/admin/stats'); setAdminStats(await r.json()) } catch { } }, [])
+  const fetchAdminUsers = useCallback(async () => { try { const r = await apiFetch('/api/admin/users'); const d = await r.json(); setAdminUsers(d.users) } catch { } }, [])
+  const fetchAdminProducts = useCallback(async () => { try { const r = await apiFetch('/api/admin/products'); const d = await r.json(); setAdminProducts(d.products) } catch { } }, [])
+  const fetchAdminBanners = useCallback(async () => { try { const r = await apiFetch('/api/admin/banners'); const d = await r.json(); setAdminBanners(Array.isArray(d) ? d : d.banners || []) } catch { } }, [])
+  const fetchAdminOrders = useCallback(async () => { try { const r = await apiFetch('/api/admin/orders'); setAdminOrders(await r.json()) } catch { } }, [])
+  const fetchAdminCompany = useCallback(async () => { try { const r = await apiFetch('/api/admin/company'); setAdminCompany(await r.json()) } catch { } }, [])
+  const fetchAdminLogs = useCallback(async () => { try { const r = await apiFetch('/api/admin/logs'); const d = await r.json(); setAdminLogs(d.logs) } catch { } }, [])
 
   useEffect(() => {
-    if (offers.banners?.length > 1) {
-      const t = setInterval(() => setCurrentBanner(b => (b + 1) % offers.banners.length), 4000)
+    if (isLoggedIn) {
+      fetchDashboard(); fetchCatalog(); fetchCategories()
+      fetchOrders(); fetchChallenges(); fetchRewardKits()
+    }
+  }, [isLoggedIn, fetchDashboard, fetchCatalog, fetchCategories, fetchOrders, fetchChallenges, fetchRewardKits])
+
+  useEffect(() => {
+    if (isLoggedIn && user?.role === 'admin' && page.startsWith('admin_')) {
+      fetchAdminStats(); fetchAdminUsers(); fetchAdminProducts()
+      fetchAdminBanners(); fetchAdminOrders(); fetchAdminCompany(); fetchAdminLogs()
+    }
+  }, [isLoggedIn, user?.role, page, fetchAdminStats, fetchAdminUsers, fetchAdminProducts, fetchAdminBanners, fetchAdminOrders, fetchAdminCompany, fetchAdminLogs])
+
+  useEffect(() => {
+    if (dashboard?.banners?.length > 1) {
+      const t = setInterval(() => setCurrentBanner(b => (b + 1) % dashboard.banners.length), 4000)
       return () => clearInterval(t)
     }
-  }, [offers.banners])
+  }, [dashboard?.banners])
 
-  const fetchProducts = async (cat: string) => {
-    setSelectedCategory(cat)
-    const path = cat === 'Todas' ? '/api/products' : `/api/products?category=${encodeURIComponent(cat)}`
-    const p = await apiFetch(path).then(r => r.json())
-    setProducts(p)
+  const addToCart = (product: any) => {
+    setCart(prev => {
+      const existing = prev.find(i => i.product_id === product.id)
+      if (existing) {
+        return prev.map(i => i.product_id === product.id ? { ...i, quantity: i.quantity + product.min_order } : i)
+      }
+      return [...prev, { product_id: product.id, name: product.name, price: product.price, quantity: product.min_order, min_order: product.min_order, image: product.image }]
+    })
+    showToast(`${product.name} adicionado ao carrinho`)
   }
 
-  const submitCupom = async () => {
-    if (!accessKey.trim()) return
-    setScanning(true)
+  const updateCartQty = (productId: number, delta: number) => {
+    setCart(prev => prev.map(i => {
+      if (i.product_id !== productId) return i
+      const newQty = i.quantity + delta
+      return newQty >= i.min_order ? { ...i, quantity: newQty } : i
+    }).filter(i => i.quantity >= i.min_order))
+  }
+
+  const removeFromCart = (productId: number) => {
+    setCart(prev => prev.filter(i => i.product_id !== productId))
+  }
+
+  const submitOrder = async () => {
+    if (cart.length === 0) return
     try {
-      const res = await apiFetch('/api/cupom/lookup', {
+      const res = await apiFetch('/api/orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_key: accessKey })
+        body: JSON.stringify({ items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })) })
       })
-      const data: LookupResult = await res.json()
-      setLookupResult(data)
-      setUser((u: any) => u ? { ...u, points: u.points + data.points_earned, cashback_balance: +(u.cashback_balance + data.cashback_earned).toFixed(2) } : u)
-      setReceipts(prev => [data.receipt, ...prev])
-    } catch (e) { console.error(e) }
-    setScanning(false)
+      const data = await res.json()
+      setOrderSuccess(data)
+      setCart([]); setShowCart(false)
+      fetchOrders(); fetchDashboard()
+    } catch (e: any) { showToast(e.message) }
   }
 
-  const filteredProducts = searchQuery
-    ? products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : products
+  const submitChallenge = async (challengeId: string) => {
+    try {
+      const res = await apiFetch('/api/challenges/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: challengeId, notes: 'Foto da vitrine enviada via app' })
+      })
+      const data = await res.json()
+      showToast(data.message)
+      fetchChallenges(); fetchDashboard()
+    } catch (e: any) { showToast(e.message) }
+  }
 
-  const serviceIcons: Record<string, any> = { gamepad: Gamepad2, diamond: Diamond, gift: Gift, users: Users }
-  const rewardIcons: Record<string, any> = { percent: Percent, truck: Truck, gift: Gift, 'dollar-sign': DollarSign, star: Star, palette: Sparkles }
+  const redeemKit = async (kitId: string) => {
+    try {
+      const res = await apiFetch('/api/rewards/redeem', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kit_id: kitId })
+      })
+      const data = await res.json()
+      showToast(data.message)
+      fetchDashboard(); fetchRewardKits()
+    } catch (e: any) { showToast(e.message) }
+  }
 
-  // ========== HOME PAGE ==========
+  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0)
+  const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
+
+  const statusColors: Record<string, string> = {
+    enviado: 'bg-blue-100 text-blue-700', aprovado: 'bg-emerald-100 text-emerald-700',
+    em_separacao: 'bg-yellow-100 text-yellow-700', em_transito: 'bg-purple-100 text-purple-700',
+    entregue: 'bg-green-100 text-green-700', cancelado: 'bg-red-100 text-red-700',
+  }
+  const statusLabels: Record<string, string> = {
+    enviado: 'Enviado', aprovado: 'Aprovado', em_separacao: 'Em Separacao',
+    em_transito: 'Em Transito', entregue: 'Entregue', cancelado: 'Cancelado',
+  }
+  const statusIcons: Record<string, any> = {
+    enviado: Send, aprovado: CheckCircle, em_separacao: Package,
+    em_transito: Truck, entregue: Check, cancelado: X,
+  }
+
+
+  // ========== LOGIN PAGE ==========
+  if (!isLoggedIn) return (
+    <div className="app-container">
+      <div className="main-scroll">
+        <div className="min-h-full flex flex-col justify-center px-6 py-12" style={{ background: 'linear-gradient(180deg, #BE185D 0%, #EC4899 50%, #FDF2F8 100%)' }}>
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 mx-auto rounded-full bg-white/20 flex items-center justify-center mb-4">
+              <Sparkles className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-white">Ruby Rose</h1>
+            <p className="text-white/80 text-sm mt-1">Plataforma B2B para Vendedoras</p>
+          </div>
+          <div className="bg-white rounded-3xl p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-gray-800 mb-1">Entrar na conta</h2>
+            <p className="text-sm text-gray-500 mb-4">Use suas credenciais de vendedora</p>
+            {loginError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{loginError}</div>}
+            <input type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-3 focus:outline-none focus:border-pink-400" />
+            <input type="password" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-4 focus:outline-none focus:border-pink-400" />
+            <button onClick={doLogin} disabled={loginLoading} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm hover:bg-pink-700 transition disabled:opacity-50">
+              {loginLoading ? 'Entrando...' : 'Entrar'}
+            </button>
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-400">Acesso restrito a vendedoras cadastradas</p>
+              <p className="text-xs text-gray-400 mt-1">Vinculacao por CNPJ da loja parceira</p>
+            </div>
+          </div>
+          <div className="mt-6 text-center">
+            <p className="text-white/60 text-xs">Teste: ana@email.com / ana123</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ========== HOME / DASHBOARD PAGE ==========
   const HomePage = () => (
     <div className="animate-fade-in">
-      {/* Ruby Rose branded header - deep rose to white gradient */}
-      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FCEEF0 50%, #FFFFFF 100%)' }} className="px-4 pt-4 pb-2">
-        {/* Search Bar */}
-        <div className="relative mb-4">
-          <input
-            type="text"
-            placeholder="Encontre produtos Ruby Rose"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full py-3.5 pl-4 pr-12 bg-white rounded-2xl text-gray-700 text-sm border border-gray-200 shadow-sm focus:outline-none focus:border-pink-300"
-          />
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div style={{ background: 'linear-gradient(180deg, #BE185D 0%, #EC4899 60%, #FDF2F8 100%)' }} className="px-4 pt-4 pb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-white/80 text-xs">Ola,</p>
+            <h2 className="text-white font-bold text-lg">{user?.name || 'Vendedora'}</h2>
+            {dashboard?.store && <p className="text-white/70 text-xs flex items-center gap-1"><MapPin className="w-3 h-3" />{dashboard.store.name}</p>}
+          </div>
+          <div className="bg-white/20 rounded-2xl px-4 py-2 text-center">
+            <p className="text-yellow-300 text-xl font-bold">{user?.points || 0}</p>
+            <p className="text-white/80 text-[10px]">pontos</p>
+          </div>
         </div>
 
-        {/* Banner Carousel */}
-        {offers.banners?.length > 0 && (
-          <div className="mb-4">
-            <div className="relative overflow-hidden rounded-2xl">
-              {offers.banners.map((b: any, i: number) => (
-                <div key={b.id} className={`transition-all duration-500 ${i === currentBanner ? 'block' : 'hidden'}`}>
-                  <div className="relative h-40 rounded-2xl overflow-hidden" style={{
-                    background: b.color === 'purple'
-                      ? 'linear-gradient(135deg, #8E24AA 0%, #AB47BC 100%)'
-                      : b.color === 'pink'
-                      ? 'linear-gradient(135deg, #E91E63 0%, #F06292 100%)'
-                      : 'linear-gradient(135deg, #EC407A 0%, #F48FB1 100%)'
-                  }}>
-                    <div className="p-5 h-full flex flex-col justify-center">
-                      {b.highlight && <span className="bg-yellow-400 text-purple-900 text-[10px] font-bold px-2.5 py-1 rounded-full self-start mb-2">DESTAQUE</span>}
-                      <h3 className="text-white text-xl font-bold leading-tight">{b.title}</h3>
-                      <p className="text-white/90 text-sm mt-1">{b.subtitle}</p>
-                      <p className="text-white/70 text-xs mt-1">{b.description}</p>
-                    </div>
-                    {/* Decorative elements */}
-                    <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
-                    <div className="absolute -right-2 -bottom-8 w-24 h-24 rounded-full bg-white/10" />
+        {/* Stats cards */}
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
+            <p className="text-white text-lg font-bold">{dashboard?.total_orders || 0}</p>
+            <p className="text-white/70 text-[10px]">Pedidos</p>
+          </div>
+          <div className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
+            <p className="text-white text-lg font-bold">R${(dashboard?.total_order_value || 0).toFixed(0)}</p>
+            <p className="text-white/70 text-[10px]">Total Vendido</p>
+          </div>
+          <div className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
+            <p className="text-white text-lg font-bold">{user?.level || 'Bronze'}</p>
+            <p className="text-white/70 text-[10px]">Nivel</p>
+          </div>
+        </div>
+
+        {/* Banner carousel */}
+        {dashboard?.banners?.length > 0 && (
+          <div className="relative overflow-hidden rounded-2xl">
+            {dashboard.banners.map((b: any, i: number) => (
+              <div key={b.id} className={`transition-all duration-500 ${i === currentBanner ? 'block' : 'hidden'}`}>
+                <div className="relative h-32 rounded-2xl overflow-hidden" style={{
+                  background: b.color === 'rose' ? 'linear-gradient(135deg, #9F1239 0%, #F43F5E 100%)'
+                    : b.color === 'purple' ? 'linear-gradient(135deg, #7E22CE 0%, #A855F7 100%)'
+                    : b.color === 'emerald' ? 'linear-gradient(135deg, #065F46 0%, #10B981 100%)'
+                    : 'linear-gradient(135deg, #BE185D 0%, #EC4899 100%)'
+                }}>
+                  <div className="p-4 h-full flex flex-col justify-center">
+                    {b.highlight && <span className="bg-yellow-400 text-purple-900 text-[9px] font-bold px-2 py-0.5 rounded-full self-start mb-1">DESTAQUE</span>}
+                    <h3 className="text-white text-base font-bold">{b.title}</h3>
+                    <p className="text-white/80 text-xs mt-0.5">{b.subtitle}</p>
                   </div>
+                  <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
                 </div>
-              ))}
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {offers.banners.map((_: any, i: number) => (
-                  <div key={i} className={`h-1.5 rounded-full transition-all ${i === currentBanner ? 'bg-pink-500 w-5' : 'bg-gray-300 w-1.5'}`} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Mundo Ruby Rose - brand services */}
-      <div className="px-4 py-4">
-        <h2 className="text-gray-900 font-bold text-lg mb-4">Mundo Ruby Rose</h2>
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-          {services.map(s => {
-            const Icon = serviceIcons[s.icon] || Gift
-            return (
-              <div key={s.id} className="flex-shrink-0 w-[120px] bg-white rounded-2xl border border-gray-100 p-4 flex flex-col items-center shadow-sm">
-                <div className="relative w-14 h-14 rounded-full bg-pink-50 flex items-center justify-center mb-2">
-                  <Icon className="w-6 h-6 text-pink-500" />
-                </div>
-                <span className="text-xs text-gray-700 font-medium text-center leading-tight">{s.name}</span>
-                {s.badge && (
-                  <span className={`mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full text-white ${s.badge_color === 'green' ? 'bg-green-500' : 'bg-pink-500'}`}>
-                    {s.badge}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Mais Vendidos - top selling products */}
-      <div className="py-4">
-        <h2 className="text-gray-900 font-bold text-lg px-4 mb-4">Mais Vendidos</h2>
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
-          {filteredProducts.slice(0, 6).map(p => (
-            <div key={p.id} className="flex-shrink-0 w-[180px] bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="h-36 bg-gradient-to-br from-pink-50 via-white to-purple-50 flex items-center justify-center p-3">
-                <ShoppingBag className="w-14 h-14 text-pink-300" />
-              </div>
-              <div className="p-3">
-                <p className="text-gray-400 text-[10px] font-medium mb-0.5">Ruby Rose</p>
-                <p className="text-gray-800 text-xs font-medium leading-tight line-clamp-2 mb-1.5">{p.name}</p>
-                <p className="text-gray-900 font-bold text-sm">R$ {p.price?.toFixed(2)}</p>
-                <p className="text-pink-600 text-xs font-semibold">{p.cashback_percent}% cashback</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Enviar Nota Fiscal */}
-      <div className="px-4 py-4">
-        <button
-          onClick={() => { setPage('notas'); setTimeout(() => setShowScanner(true), 100) }}
-          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-4 flex items-center gap-3 shadow-lg active:scale-[0.98] transition-transform"
-        >
-          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-            <ScanLine className="w-6 h-6 text-white" />
-          </div>
-          <div className="text-left flex-1">
-            <p className="text-white font-bold text-[15px]">Enviar nota fiscal</p>
-            <p className="text-white/80 text-xs">Escaneie o QR Code e ganhe cashback</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-white/80" />
-        </button>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Onde Encontrar - Ruby Rose authorized retailers */}
-      <div className="py-4">
-        <div className="flex items-center justify-between px-4 mb-1">
-          <h2 className="text-gray-900 font-bold text-lg">Onde Encontrar</h2>
-          <span className="text-rose-600 text-sm font-medium">Ver todas</span>
-        </div>
-        <p className="text-gray-500 text-xs px-4 mb-4">Lojas parceiras com cashback Ruby Rose</p>
-
-        {/* Partner Highlight Banner */}
-        <div className="px-4 mb-4">
-          <div className="h-40 rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #880E4F 0%, #C2185B 40%, #AD1457 100%)' }}>
-            <div className="p-5 h-full flex flex-col justify-center relative z-10">
-              <p className="text-white/90 text-sm font-medium mb-1">Exclusivo para voce</p>
-              <p className="text-white text-lg font-bold leading-tight">Cashback especial<br/><span className="text-rose-200">nos nossos parceiros</span></p>
-            </div>
-            <div className="absolute -right-4 -top-4 w-28 h-28 rounded-full bg-white/10" />
-            <div className="absolute right-8 bottom-4 w-16 h-16 rounded-full bg-white/10" />
-            <div className="absolute -left-2 -bottom-6 w-20 h-20 rounded-full bg-white/5" />
-          </div>
-        </div>
-
-        {/* Partner Grid 4x2 */}
-        <div className="grid grid-cols-4 gap-y-5 gap-x-2 px-4">
-          {parceirosRubyRose.map((s, i) => (
-            <div key={i} className="flex flex-col items-center">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-1.5 shadow-sm border border-gray-100" style={{ background: s.color + '15' }}>
-                <span className="font-bold text-sm" style={{ color: s.color }}>{s.initials}</span>
-              </div>
-              <span className="text-[10px] text-gray-600 text-center leading-tight truncate w-full">{s.name}</span>
-              <span className="text-xs font-bold text-gray-800">{s.cashback}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Promocoes Exclusivas section */}
-      <div className="py-4">
-        <h2 className="text-gray-900 font-bold text-lg px-4 mb-4">Promocoes Exclusivas</h2>
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
-          <div className="flex-shrink-0 w-[300px] h-44 rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #4A0E2E 0%, #7B1340 50%, #4A0E2E 100%)' }}>
-            <div className="p-5 h-full flex flex-col justify-center relative z-10">
-              <p className="text-white/80 text-xs">Novos membros</p>
-              <p className="text-white text-2xl font-bold">Cashback total</p>
-              <p className="text-rose-300 text-3xl font-black">na 1a compra</p>
-              <p className="text-white/80 text-sm">Ate R$ 30 de volta</p>
-              <div className="mt-2 bg-rose-600 rounded-full px-4 py-1.5 self-start">
-                <span className="text-white text-xs font-bold">Aproveitar</span>
-              </div>
-            </div>
-            <div className="absolute right-4 top-4 w-20 h-20 bg-rose-500/20 rounded-full" />
-            <div className="absolute right-12 bottom-6 w-12 h-12 bg-amber-500/20 rounded-full" />
-          </div>
-          <div className="flex-shrink-0 w-[300px] h-44 rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #C62828 0%, #E53935 100%)' }}>
-            <div className="p-5 h-full flex flex-col justify-center">
-              <p className="text-white/80 text-xs">Convide amigas</p>
-              <p className="text-white text-xl font-bold">Ganhe R$ 20</p>
-              <p className="text-white/90 text-sm mt-1">por cada indicacao</p>
-              <div className="mt-2 bg-white/20 rounded-full px-4 py-1.5 self-start">
-                <span className="text-white text-xs font-bold">Convidar</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Cupons de Desconto */}
-      <div className="py-4">
-        <h2 className="text-gray-900 font-bold text-lg px-4 mb-1">Cupons de Desconto</h2>
-        <p className="text-gray-500 text-xs px-4 mb-4">Ofertas selecionadas para voce</p>
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
-          {[
-            { store: 'Ruby Rose', discount: '20% OFF', code: 'RUBY20' },
-            { store: 'Drogasil', discount: 'R$30 OFF', code: 'DROGA30' },
-            { store: 'Panvel', discount: '15% OFF', code: 'PANVEL15' },
-          ].map((c, i) => (
-            <div key={i} className="flex-shrink-0 w-[160px] bg-pink-50 rounded-2xl p-4 border border-pink-100">
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center mb-2 shadow-sm">
-                <Ticket className="w-5 h-5 text-pink-500" />
-              </div>
-              <p className="text-gray-500 text-[10px] font-medium">{c.store}</p>
-              <p className="text-gray-900 font-black text-lg leading-tight">CUPOM</p>
-              <p className="text-pink-600 font-black text-xl leading-tight">{c.discount}</p>
-              <div className="mt-2 bg-pink-500 rounded-full px-3 py-1 text-center">
-                <span className="text-white text-[10px] font-bold">{c.code}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Categorias */}
-      <div className="py-4 px-4">
-        <h2 className="text-gray-900 font-bold text-lg mb-3">Categorias</h2>
-        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-          {categories.map(c => (
-            <button key={c} onClick={() => fetchProducts(c)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${selectedCategory === c ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}
-            >{c}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Product Grid */}
-      <div className="px-4 pb-4">
-        <div className="flex items-center justify-between mb-3">
-            <h2 className="text-gray-900 font-bold text-lg">Vitrine Ruby Rose</h2>
-            <span className="text-rose-600 text-sm font-medium">Ver todos</span>
-        </div>
-        <div className="space-y-3">
-          {filteredProducts.slice(0, 4).map(p => (
-            <div key={p.id} className="bg-white rounded-xl p-3 flex gap-3 border border-gray-100 shadow-sm">
-              <div className="w-24 h-24 bg-gradient-to-br from-pink-50 to-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                <ShoppingBag className="w-10 h-10 text-pink-300" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-gray-400 text-[10px] font-medium">Ruby Rose</p>
-                <p className="text-gray-800 text-sm font-medium leading-tight line-clamp-2 mb-1">{p.name}</p>
-                <p className="text-gray-900 font-bold text-base">R$ {p.price?.toFixed(2)}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-pink-600 text-xs font-semibold">Ate {p.cashback_percent}% cashback</span>
-                  <div className="flex items-center gap-1 text-gray-400">
-                    <ThumbsUp className="w-3 h-3" />
-                    <span className="text-[10px]">{Math.floor(Math.random() * 200 + 50)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      {/* Lojas Visitadas */}
-      <div className="py-4">
-        <div className="flex items-center justify-between px-4 mb-4">
-          <h2 className="text-gray-900 font-bold text-lg">Parceiros em Alta</h2>
-          <span className="text-rose-600 text-sm font-medium">Ver todos</span>
-        </div>
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 pb-2">
-            {parceirosRubyRose.slice(0, 5).map((s, i) => (
-              <div key={i} className="flex-shrink-0 w-[200px] bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: s.color + '15' }}>
-                    <span className="font-bold text-sm" style={{ color: s.color }}>{s.initials}</span>
-                  </div>
-                  <div>
-                    <p className="text-gray-800 text-sm font-medium">{s.name}</p>
-                    <p className="text-rose-600 text-xs font-semibold">Ate {s.cashback} cashback</p>
-                  </div>
-                </div>
-                <div className="h-0.5 bg-rose-500 rounded-full w-1/3" />
               </div>
             ))}
-        </div>
-      </div>
-
-      {/* Missoes */}
-      <div className="section-divider" />
-      <div className="py-4 px-4 pb-6">
-        <h2 className="text-gray-900 font-bold text-lg mb-3">Desafios da Semana</h2>
-        {missions.slice(0, 3).map(m => (
-          <div key={m.id} className="bg-white rounded-xl p-3 mb-2 shadow-sm flex items-center gap-3 border border-gray-100">
-            <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center">
-              <Trophy className="w-5 h-5 text-pink-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-800 text-sm font-medium">{m.name}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="flex-1 h-1.5 bg-gray-100 rounded-full">
-                  <div className="h-full bg-gradient-to-r from-pink-400 to-pink-500 rounded-full" style={{ width: `${(m.progress / m.total) * 100}%` }} />
-                </div>
-                <span className="text-[10px] text-gray-500">{m.progress}/{m.total}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="text-pink-500 text-xs font-bold">+{m.points_reward}</span>
-              <p className="text-[9px] text-gray-400">pts</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-
-  // ========== NOTAS PAGE ==========
-  const NotasPage = () => (
-    <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-1">Meus Cupons Fiscais</h1>
-        <p className="text-gray-500 text-sm mb-4">Envie seus cupons fiscais e ganhe cashback</p>
-        <div className="flex gap-3">
-          <div className="flex-1 bg-white rounded-2xl p-4 text-center shadow-sm border border-pink-100">
-            <p className="text-pink-600 text-2xl font-bold">{receipts.length}</p>
-            <p className="text-gray-500 text-xs">Notas enviadas</p>
-          </div>
-          <div className="flex-1 bg-white rounded-2xl p-4 text-center shadow-sm border border-pink-100">
-            <p className="text-pink-600 text-2xl font-bold">R$ {receipts.reduce((s, r) => s + r.cashback_total, 0).toFixed(2)}</p>
-            <p className="text-gray-500 text-xs">Cashback total</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 -mt-2 mb-4">
-        <button
-          onClick={() => { setShowScanner(true); setLookupResult(null); setAccessKey('') }}
-          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-4 flex items-center gap-3 shadow-lg active:scale-[0.98] transition-transform"
-        >
-          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-            <Camera className="w-6 h-6 text-white" />
-          </div>
-          <div className="text-left flex-1">
-            <p className="text-white font-bold">Enviar cupom fiscal</p>
-            <p className="text-white/80 text-xs">Escaneie o QR Code da nota</p>
-          </div>
-          <ArrowRight className="w-5 h-5 text-white" />
-        </button>
-      </div>
-
-      <div className="px-4 mb-5">
-        <h3 className="text-gray-900 font-bold text-base mb-3">Como funciona</h3>
-        <div className="flex gap-3">
-          {[
-            { icon: Camera, title: 'Escaneie', desc: 'o QR Code da nota' },
-            { icon: Search, title: 'Identificamos', desc: 'produtos Ruby Rose' },
-            { icon: DollarSign, title: 'Cashback', desc: 'creditado na hora' },
-          ].map((step, i) => (
-            <div key={i} className="flex-1 bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center mx-auto mb-2">
-                <step.icon className="w-5 h-5 text-pink-500" />
-              </div>
-              <p className="text-gray-800 text-xs font-semibold">{step.title}</p>
-              <p className="text-gray-400 text-[10px]">{step.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section-divider" />
-
-      <div className="px-4 py-4">
-        <h3 className="text-gray-900 font-bold text-base mb-3">Historico</h3>
-        {receipts.length === 0 ? (
-          <div className="text-center py-8">
-            <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-            <p className="text-gray-400 text-sm">Nenhuma nota enviada</p>
-            <p className="text-gray-400 text-xs">Envie seu primeiro cupom fiscal!</p>
-          </div>
-        ) : (
-          receipts.map(r => (
-            <div key={r.id} className="bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-gray-800 text-sm font-semibold">{r.store.name}</p>
-                    <p className="text-gray-400 text-[10px]">{r.store.city} - {r.store.state}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-green-600 font-bold text-sm">+R$ {r.cashback_total.toFixed(2)}</p>
-                  <p className="text-green-500 text-[10px]">+{r.points_earned} pts</p>
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-2 mb-1.5">
-                <p className="text-gray-500 text-[10px]">{r.items.length} itens | {r.ruby_rose_items} Ruby Rose</p>
-                <p className="text-gray-500 text-[10px]">R$ {r.total_value.toFixed(2)}</p>
-              </div>
-              {r.items.filter(it => it.is_ruby_rose).map((it, idx) => (
-                <div key={idx} className="flex items-center justify-between py-1.5 border-t border-gray-50">
-                  <div className="flex items-center gap-2">
-                    <Heart className="w-3.5 h-3.5 text-pink-400" />
-                    <span className="text-gray-700 text-xs">{it.name}</span>
-                  </div>
-                  <span className="text-green-600 text-xs font-semibold">+R$ {(it.cashback_value || 0).toFixed(2)}</span>
-                </div>
+            <div className="flex justify-center gap-1.5 mt-2">
+              {dashboard.banners.map((_: any, i: number) => (
+                <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentBanner ? 'bg-white w-4' : 'bg-white/40'}`} />
               ))}
             </div>
-          ))
+          </div>
         )}
       </div>
-    </div>
-  )
 
-  // ========== CONTA PAGE ==========
-  const ContaPage = () => (
-    <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #FDE4EC 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-4">Minha Conta</h1>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-pink-100">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-14 h-14 rounded-full bg-pink-100 flex items-center justify-center">
-              <User className="w-7 h-7 text-pink-500" />
-            </div>
-            <div>
-              <p className="text-gray-800 font-bold text-base">{user?.name || 'Carregando...'}</p>
-              <p className="text-gray-400 text-xs">{user?.email}</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Crown className="w-3.5 h-3.5 text-yellow-500" />
-                <span className="text-xs font-semibold text-yellow-600">Nivel {user?.level}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* Quick actions */}
       <div className="px-4 -mt-2">
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-4 gap-3">
           {[
-            { label: 'Pontos', value: user?.points?.toLocaleString('pt-BR') || '0', icon: Star, color: 'text-yellow-500' },
-            { label: 'Cashback', value: `R$ ${user?.cashback_balance?.toFixed(2) || '0.00'}`, icon: DollarSign, color: 'text-green-500' },
-            { label: 'Notas', value: user?.receipts_count || 0, icon: Receipt, color: 'text-pink-500' },
-          ].map((s, i) => (
-            <div key={i} className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <s.icon className={`w-5 h-5 mx-auto mb-1 ${s.color}`} />
-              <p className="text-gray-800 font-bold text-sm">{s.value}</p>
-              <p className="text-gray-400 text-[10px]">{s.label}</p>
-            </div>
+            { icon: ShoppingCart, label: 'Novo Pedido', color: 'bg-pink-100 text-pink-600', action: () => setPage('catalogo') },
+            { icon: Trophy, label: 'Desafios', color: 'bg-purple-100 text-purple-600', action: () => setPage('desafios') },
+            { icon: Gift, label: 'Premios', color: 'bg-emerald-100 text-emerald-600', action: () => setShowRewardKits(true) },
+            { icon: Package, label: 'Pedidos', color: 'bg-blue-100 text-blue-600', action: () => setPage('pedidos') },
+          ].map((a, i) => (
+            <button key={i} onClick={a.action} className="flex flex-col items-center gap-1.5">
+              <div className={`w-12 h-12 rounded-2xl ${a.color} flex items-center justify-center`}>
+                <a.icon className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] text-gray-600 font-medium">{a.label}</span>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="section-divider" />
-
-      <div className="px-4 py-4">
-        <h3 className="text-gray-900 font-bold text-base mb-3">Recompensas</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {rewards.map(r => {
-            const Icon = rewardIcons[r.icon] || Gift
-            return (
-              <div key={r.id} className="bg-white rounded-xl p-3 border border-gray-100 shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-pink-500" />
-                  </div>
-                  <p className="text-gray-800 text-xs font-medium flex-1 leading-tight">{r.name}</p>
+      {/* Active challenges */}
+      {dashboard?.active_challenges?.length > 0 && (
+        <div className="px-4 mt-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-gray-800 text-sm">Desafios Ativos</h3>
+            <button onClick={() => setPage('desafios')} className="text-pink-600 text-xs font-medium flex items-center gap-0.5">Ver todos <ChevronRight className="w-3 h-3" /></button>
+          </div>
+          <div className="space-y-2">
+            {dashboard.active_challenges.slice(0, 2).map((c: any) => (
+              <div key={c.id} className="bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.progress >= c.goal ? 'bg-green-100' : 'bg-purple-100'}`}>
+                  {c.progress >= c.goal ? <Check className="w-5 h-5 text-green-600" /> : <Target className="w-5 h-5 text-purple-600" />}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-gray-400">{r.points_required} pts</span>
-                  <span className="text-[10px] text-pink-500 font-semibold bg-pink-50 px-2 py-0.5 rounded-full">Resgatar</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{c.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-pink-500 rounded-full transition-all" style={{ width: `${Math.min(100, (c.progress / c.goal) * 100)}%` }} />
+                    </div>
+                    <span className="text-[10px] text-gray-500">{c.progress}/{c.goal}</span>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-yellow-600">{c.points_reward}pts</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent orders */}
+      {dashboard?.recent_orders?.length > 0 && (
+        <div className="px-4 mt-5 pb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-gray-800 text-sm">Ultimos Pedidos</h3>
+            <button onClick={() => setPage('pedidos')} className="text-pink-600 text-xs font-medium flex items-center gap-0.5">Ver todos <ChevronRight className="w-3 h-3" /></button>
+          </div>
+          <div className="space-y-2">
+            {dashboard.recent_orders.map((o: any) => {
+              const Icon = statusIcons[o.status] || Package
+              return (
+                <button key={o.id} onClick={() => setShowOrderDetail(o)} className="w-full bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 text-left">
+                  <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center">
+                    <Icon className="w-5 h-5 text-gray-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{o.store_name}</p>
+                    <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-gray-800">R${o.total_value.toFixed(2)}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[o.status] || 'bg-gray-100 text-gray-600'}`}>{statusLabels[o.status] || o.status}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+
+  // ========== CATALOG PAGE ==========
+  const CatalogoPage = () => {
+    const filtered = searchQuery ? catalog.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())) : catalog
+    return (
+      <div className="animate-fade-in">
+        <div className="bg-pink-600 px-4 pt-4 pb-5">
+          <h2 className="text-white font-bold text-lg mb-3">Catalogo de Produtos</h2>
+          <div className="relative">
+            <input type="text" placeholder="Buscar produtos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              className="w-full py-3 pl-4 pr-10 bg-white/20 rounded-xl text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+          </div>
+        </div>
+
+        {/* Categories */}
+        <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
+          {categories.map(c => (
+            <button key={c} onClick={() => { setSelectedCategory(c); fetchCatalog(c) }}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${c === selectedCategory ? 'bg-pink-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{c}</button>
+          ))}
+        </div>
+
+        {/* Products grid */}
+        <div className="px-4 pb-4 grid grid-cols-2 gap-3">
+          {filtered.map(p => {
+            const inCart = cart.find(i => i.product_id === p.id)
+            return (
+              <div key={p.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="h-28 bg-gradient-to-br from-pink-50 to-rose-50 flex items-center justify-center">
+                  <ShoppingBag className="w-10 h-10 text-pink-300" />
+                </div>
+                <div className="p-3">
+                  <p className="text-xs font-medium text-gray-800 line-clamp-2 h-8">{p.name}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{p.category}</p>
+                  <div className="flex items-center justify-between mt-2">
+                    <div>
+                      <p className="text-sm font-bold text-pink-600">R${p.price.toFixed(2)}</p>
+                      <p className="text-[9px] text-gray-400">Min: {p.min_order} un</p>
+                    </div>
+                    {inCart ? (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => updateCartQty(p.id, -1)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                        <span className="text-xs font-bold w-5 text-center">{inCart.quantity}</span>
+                        <button onClick={() => updateCartQty(p.id, 1)} className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center"><Plus className="w-3 h-3 text-pink-600" /></button>
+                      </div>
+                    ) : (
+                      <button onClick={() => addToCart(p)} className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center">
+                        <Plus className="w-4 h-4 text-white" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )
           })}
         </div>
       </div>
+    )
+  }
 
-      <div className="section-divider" />
-
-      <div className="px-4 py-4">
-        <h3 className="text-gray-900 font-bold text-base mb-3">Missoes ativas</h3>
-        {missions.map(m => (
-          <div key={m.id} className="bg-white rounded-xl p-3 mb-2 shadow-sm flex items-center gap-3 border border-gray-100">
-            <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center">
-              <Trophy className="w-5 h-5 text-pink-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-800 text-sm font-medium">{m.name}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="flex-1 h-1.5 bg-gray-100 rounded-full">
-                  <div className="h-full bg-pink-400 rounded-full" style={{ width: `${(m.progress / m.total) * 100}%` }} />
-                </div>
-                <span className="text-[10px] text-gray-500">{m.progress}/{m.total}</span>
-              </div>
-            </div>
-            <span className="text-pink-500 text-xs font-bold">+{m.points_reward} pts</span>
-          </div>
-        ))}
+  // ========== ORDERS PAGE ==========
+  const PedidosPage = () => (
+    <div className="animate-fade-in">
+      <div className="bg-pink-600 px-4 pt-4 pb-5">
+        <h2 className="text-white font-bold text-lg">Meus Pedidos</h2>
+        <p className="text-white/70 text-xs mt-0.5">{orders.length} pedido(s) encontrado(s)</p>
       </div>
-
-      <div className="section-divider" />
-
-      {/* LGPD / Configuracoes */}
-      <div className="px-4 py-4 pb-6">
-        <h3 className="text-gray-900 font-bold text-base mb-3">Configuracoes e Privacidade</h3>
-        <div className="space-y-2">
-          <button onClick={openPrivacyPolicy} className="w-full flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-100 shadow-sm active:bg-gray-50">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-blue-500" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-gray-800 text-sm font-medium">Politica de Privacidade</p>
-              <p className="text-gray-400 text-[10px]">LGPD - Seus direitos e dados</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-300" />
-          </button>
-          <button onClick={openPrivacyPolicy} className="w-full flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-100 shadow-sm active:bg-gray-50">
-            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-              <FileText className="w-5 h-5 text-green-500" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-gray-800 text-sm font-medium">Exportar meus dados</p>
-              <p className="text-gray-400 text-[10px]">Baixar copia dos seus dados</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-300" />
-          </button>
-          <button onClick={() => setShowDeleteConfirm(true)} className="w-full flex items-center gap-3 bg-white rounded-xl p-3 border border-red-100 shadow-sm active:bg-red-50">
-            <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
-              <Trash2 className="w-5 h-5 text-red-500" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-red-600 text-sm font-medium">Excluir minha conta</p>
-              <p className="text-gray-400 text-[10px]">Remover todos os seus dados</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-300" />
-          </button>
-        </div>
+      <div className="px-4 py-3 space-y-3">
+        {orders.length === 0 ? (
+          <div className="text-center py-12">
+            <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">Nenhum pedido ainda</p>
+            <button onClick={() => setPage('catalogo')} className="mt-3 px-4 py-2 bg-pink-600 text-white rounded-xl text-sm">Fazer primeiro pedido</button>
+          </div>
+        ) : orders.map(o => {
+          const Icon = statusIcons[o.status] || Package
+          return (
+            <button key={o.id} onClick={() => setShowOrderDetail(o)} className="w-full bg-white rounded-xl border border-gray-100 p-4 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Icon className="w-4 h-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">{o.id}</span>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[o.status] || 'bg-gray-100'}`}>{statusLabels[o.status] || o.status}</span>
+              </div>
+              <p className="text-sm font-medium text-gray-800">{o.store_name}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{new Date(o.created_at).toLocaleDateString('pt-BR')} - {o.items?.length || 0} item(ns)</p>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
+                <span className="text-xs text-gray-500">Total do pedido</span>
+                <span className="text-sm font-bold text-gray-800">R${o.total_value.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-gray-500">Pontos ganhos</span>
+                <span className="text-xs font-bold text-yellow-600">+{o.points_earned} pts</span>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
 
-  // ========== LGPD CONSENT BANNER ==========
-  const LGPDConsentBanner = () => showLGPDConsent ? (
-    <div className="fixed bottom-16 left-0 right-0 z-50 flex justify-center px-4 animate-slide-up">
-      <div className="w-full max-w-[430px] bg-white rounded-2xl shadow-2xl border border-gray-200 p-4">
-        <div className="flex items-start gap-3 mb-3">
-          <Shield className="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-gray-900 font-bold text-sm">Sua privacidade importa</h3>
-            <p className="text-gray-500 text-xs mt-1 leading-relaxed">
-              Utilizamos seus dados para personalizar ofertas de cashback e melhorar sua experiencia. 
-              Voce pode gerenciar suas preferencias a qualquer momento em Perfil {'>'} Configuracoes.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={openPrivacyPolicy} className="flex-1 py-2.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-xl">
-            Saiba mais
-          </button>
-          <button onClick={acceptLGPDConsent} className="flex-1 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 rounded-xl shadow">
-            Aceitar e continuar
-          </button>
-        </div>
+  // ========== CHALLENGES PAGE ==========
+  const DesafiosPage = () => (
+    <div className="animate-fade-in">
+      <div className="bg-purple-600 px-4 pt-4 pb-5">
+        <h2 className="text-white font-bold text-lg">Desafios</h2>
+        <p className="text-white/70 text-xs mt-0.5">Complete desafios e ganhe pontos e premios</p>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        {challenges.map(c => {
+          const pct = Math.min(100, (c.progress / c.goal) * 100)
+          const done = c.completed
+          return (
+            <div key={c.id} className={`bg-white rounded-xl border p-4 ${done ? 'border-green-200' : 'border-gray-100'}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${done ? 'bg-green-100' : 'bg-purple-100'}`}>
+                  {done ? <CheckCircle className="w-6 h-6 text-green-600" /> : c.type === 'vitrine' ? <Camera className="w-6 h-6 text-purple-600" /> : c.type === 'vendas' ? <ShoppingCart className="w-6 h-6 text-purple-600" /> : c.type === 'social' ? <Gift className="w-6 h-6 text-purple-600" /> : <Target className="w-6 h-6 text-purple-600" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-gray-800">{c.title}</h4>
+                    <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">{c.points_reward} pts</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{c.description}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${done ? 'bg-green-500' : 'bg-purple-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] text-gray-500 font-medium">{c.progress}/{c.goal}</span>
+                  </div>
+                  {c.reward_kit && <p className="text-[10px] text-emerald-600 mt-1.5 flex items-center gap-1"><Gift className="w-3 h-3" />Premio: {c.reward_kit.name}</p>}
+                  {!done && (
+                    <button onClick={() => submitChallenge(c.id)} className="mt-3 w-full py-2 bg-purple-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5" /> Enviar Comprovante
+                    </button>
+                  )}
+                  {done && <p className="mt-2 text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Desafio concluido!</p>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
-  ) : null
+  )
 
-  // ========== PRIVACY POLICY MODAL ==========
-  const PrivacyPolicyModal = () => showPrivacyPolicy ? (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowPrivacyPolicy(false)}>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative bg-white w-full max-w-[430px] rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-500" />
-            <h2 className="text-gray-900 font-bold text-base">Politica de Privacidade</h2>
+
+  // ========== PROFILE PAGE ==========
+  const PerfilPage = () => (
+    <div className="animate-fade-in">
+      <div className="bg-pink-600 px-4 pt-4 pb-8">
+        <h2 className="text-white font-bold text-lg">Meu Perfil</h2>
+      </div>
+      <div className="px-4 -mt-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-14 h-14 rounded-full bg-pink-100 flex items-center justify-center">
+              <User className="w-7 h-7 text-pink-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-800">{user?.name}</h3>
+              <p className="text-xs text-gray-500">{user?.email}</p>
+              <p className="text-[10px] text-pink-600 font-medium">{user?.role === 'promotora' ? 'Promotora' : user?.role === 'gerente_loja' ? 'Gerente de Loja' : user?.role === 'vendedor_ruby' ? 'Vendedor Ruby Rose' : 'Admin'}</p>
+            </div>
           </div>
-          <button onClick={() => setShowPrivacyPolicy(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-            <X className="w-4 h-4 text-gray-500" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-yellow-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-yellow-600">{user?.points || 0}</p>
+              <p className="text-[10px] text-gray-500">Pontos</p>
+            </div>
+            <div className="bg-pink-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-pink-600">{user?.level || 'Bronze'}</p>
+              <p className="text-[10px] text-gray-500">Nivel</p>
+            </div>
+            <div className="bg-purple-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-purple-600">{user?.challenges_completed || 0}</p>
+              <p className="text-[10px] text-gray-500">Desafios</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Store info */}
+        {dashboard?.store && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mt-3">
+            <h4 className="font-bold text-gray-800 text-sm mb-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-pink-600" /> Minha Loja</h4>
+            <p className="text-sm text-gray-700">{dashboard.store.name}</p>
+            <p className="text-xs text-gray-500">{dashboard.store.address}</p>
+            <p className="text-xs text-gray-500">{dashboard.store.city} - {dashboard.store.state}</p>
+            <p className="text-[10px] text-gray-400 mt-1">CNPJ: {dashboard.store.cnpj}</p>
+          </div>
+        )}
+
+        {/* Reward kits button */}
+        <button onClick={() => setShowRewardKits(true)} className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mt-3 flex items-center gap-3 text-left">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><Gift className="w-5 h-5 text-emerald-600" /></div>
+          <div className="flex-1"><p className="text-sm font-medium text-gray-800">Resgatar Premios</p><p className="text-[10px] text-gray-500">Troque seus pontos por kits de produtos</p></div>
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        </button>
+
+        {/* LGPD / Privacy */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-3 overflow-hidden">
+          <button onClick={() => { setShowPrivacy(true); if (!privacyData) apiFetch('/api/lgpd/privacy-policy').then(r => r.json()).then(setPrivacyData).catch(() => {}) }} className="w-full p-4 flex items-center gap-3 text-left border-b border-gray-50">
+            <Shield className="w-5 h-5 text-gray-500" />
+            <span className="text-sm text-gray-700">Politica de Privacidade</span>
+            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
+          </button>
+          <button onClick={async () => { try { const res = await apiFetch('/api/lgpd/export'); const data = await res.json(); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'meus_dados_rubyrose.json'; a.click() } catch {} }} className="w-full p-4 flex items-center gap-3 text-left border-b border-gray-50">
+            <FileText className="w-5 h-5 text-gray-500" />
+            <span className="text-sm text-gray-700">Exportar meus dados</span>
+            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="w-full p-4 flex items-center gap-3 text-left">
+            <Trash2 className="w-5 h-5 text-red-500" />
+            <span className="text-sm text-red-600">Excluir minha conta</span>
+            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
           </button>
         </div>
-        <div className="p-4">
-          {privacyPolicyData ? (
-            <div className="space-y-4">
-              <p className="text-gray-400 text-xs">Versao {privacyPolicyData.version} | Ultima atualizacao: {privacyPolicyData.last_updated || '2026-03-01'}</p>
-              {privacyPolicyData.sections?.map((s: any, i: number) => (
-                <div key={i}>
-                  <h3 className="text-gray-900 font-bold text-sm mb-1">{s.title}</h3>
-                  <p className="text-gray-600 text-xs leading-relaxed">{s.content}</p>
-                </div>
-              ))}
+
+        {/* Logout */}
+        <button onClick={doLogout} className="w-full bg-gray-100 rounded-2xl p-4 mt-3 mb-4 flex items-center justify-center gap-2 text-gray-600 font-medium text-sm">
+          <LogOut className="w-4 h-4" /> Sair da conta
+        </button>
+      </div>
+    </div>
+  )
+
+
+  // ========== MODALS ==========
+
+  // Cart Modal
+  const CartModal = () => showCart ? (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowCart(false)} />
+      <div className="relative bg-white rounded-t-3xl w-full max-w-[430px] max-h-[80vh] overflow-y-auto animate-slide-up">
+        <div className="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">Carrinho ({cartCount} itens)</h3>
+          <button onClick={() => setShowCart(false)}><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          {cart.length === 0 ? (
+            <div className="text-center py-8">
+              <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+              <p className="text-gray-500 text-sm">Carrinho vazio</p>
             </div>
           ) : (
-            <p className="text-gray-400 text-sm text-center py-8">Carregando...</p>
+            <>
+              {cart.map(item => (
+                <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+                  <div className="w-12 h-12 rounded-lg bg-pink-50 flex items-center justify-center flex-shrink-0">
+                    <ShoppingBag className="w-5 h-5 text-pink-300" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
+                    <p className="text-[10px] text-gray-400">R${item.price.toFixed(2)}/un</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => updateCartQty(item.product_id, -1)} className="w-6 h-6 rounded-full bg-white border flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                    <span className="text-xs font-bold w-6 text-center">{item.quantity}</span>
+                    <button onClick={() => updateCartQty(item.product_id, 1)} className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center"><Plus className="w-3 h-3 text-pink-600" /></button>
+                  </div>
+                  <button onClick={() => removeFromCart(item.product_id)}><X className="w-4 h-4 text-red-400" /></button>
+                </div>
+              ))}
+              <div className="border-t border-gray-100 pt-3 mt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-gray-600">Total do pedido</span>
+                  <span className="text-lg font-bold text-gray-800">R${cartTotal.toFixed(2)}</span>
+                </div>
+                <p className="text-[10px] text-gray-400 mb-3">+{Math.floor(cartTotal / 20)} pontos estimados</p>
+                <button onClick={submitOrder} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2">
+                  <Send className="w-4 h-4" /> Enviar Pedido para Loja
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
     </div>
   ) : null
 
-  // ========== DELETE ACCOUNT CONFIRMATION ==========
-  const DeleteConfirmModal = () => showDeleteConfirm ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={() => setShowDeleteConfirm(false)}>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative bg-white w-full max-w-[350px] rounded-2xl p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex flex-col items-center text-center">
-          <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-3">
-            <AlertTriangle className="w-7 h-7 text-red-500" />
+  // Order Detail Modal
+  const OrderDetailModal = () => showOrderDetail ? (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowOrderDetail(null)} />
+      <div className="relative bg-white rounded-t-3xl w-full max-w-[430px] max-h-[80vh] overflow-y-auto animate-slide-up">
+        <div className="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">Pedido {showOrderDetail.id}</h3>
+          <button onClick={() => setShowOrderDetail(null)}><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">{showOrderDetail.store_name}</p>
+              <p className="text-[10px] text-gray-400">{new Date(showOrderDetail.created_at).toLocaleDateString('pt-BR')}</p>
+            </div>
+            <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusColors[showOrderDetail.status] || 'bg-gray-100'}`}>{statusLabels[showOrderDetail.status] || showOrderDetail.status}</span>
           </div>
-          <h3 className="text-gray-900 font-bold text-base mb-1">Excluir conta?</h3>
-          <p className="text-gray-500 text-xs mb-4 leading-relaxed">
-            Esta acao e irreversivel. Todos os seus dados, pontos e cashback serao permanentemente removidos conforme a LGPD.
-          </p>
-          <div className="flex gap-2 w-full">
-            <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl">
-              Cancelar
-            </button>
-            <button onClick={() => { setShowDeleteConfirm(false); alert('Solicitacao de exclusao enviada. Seus dados serao removidos em ate 15 dias uteis.') }} className="flex-1 py-2.5 text-sm font-bold text-white bg-red-500 rounded-xl">
-              Excluir
-            </button>
+          <div className="space-y-2 mb-4">
+            {showOrderDetail.items?.map((item: any, i: number) => (
+              <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-800">{item.name}</p>
+                  <p className="text-[10px] text-gray-400">{item.quantity} x R${item.unit_price.toFixed(2)}</p>
+                </div>
+                <p className="text-sm font-bold text-gray-800">R${item.total.toFixed(2)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex justify-between"><span className="text-sm text-gray-500">Total</span><span className="text-lg font-bold">R${showOrderDetail.total_value.toFixed(2)}</span></div>
+            <div className="flex justify-between mt-1"><span className="text-xs text-gray-500">Pontos ganhos</span><span className="text-xs font-bold text-yellow-600">+{showOrderDetail.points_earned} pts</span></div>
           </div>
         </div>
       </div>
     </div>
   ) : null
 
-  // ========== PREMIOS PAGE ==========
-  const JogosPage = () => (
-    <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-1">Ganhe Premios</h1>
-        <p className="text-gray-500 text-sm">Participe e acumule pontos Ruby Rose</p>
-      </div>
-      <div className="px-4 space-y-3 pb-6">
-        {[
-          { name: 'Quiz de Beleza', desc: 'Teste seus conhecimentos de make', pts: 500, icon: Zap, bg: 'from-rose-600 to-rose-800' },
-          { name: 'Avalie Produtos', desc: 'De sua opiniao e ganhe pontos', pts: 200, icon: Star, bg: 'from-pink-500 to-pink-700' },
-          { name: 'Desafio Semanal', desc: 'Complete metas e suba de nivel', pts: 100, icon: Trophy, bg: 'from-amber-500 to-amber-700' },
-          { name: 'Convide Amigas', desc: 'Indique e ganhe pontos extras', pts: 300, icon: Gift, bg: 'from-purple-500 to-purple-700' },
-        ].map((g, i) => (
-          <div key={i} className={`bg-gradient-to-r ${g.bg} rounded-2xl p-4 flex items-center gap-4 shadow-lg`}>
-            <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-              <g.icon className="w-7 h-7 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white font-bold text-base">{g.name}</p>
-              <p className="text-white/80 text-xs">{g.desc}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-white font-bold">+{g.pts}</p>
-              <p className="text-white/70 text-[10px]">pontos</p>
-            </div>
-          </div>
-        ))}
+  // Order Success Modal
+  const OrderSuccessModal = () => orderSuccess ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setOrderSuccess(null)} />
+      <div className="relative bg-white rounded-3xl w-full max-w-[380px] p-6 text-center animate-slide-up">
+        <div className="w-16 h-16 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-4"><CheckCircle className="w-8 h-8 text-green-600" /></div>
+        <h3 className="text-lg font-bold text-gray-800 mb-1">Pedido Enviado!</h3>
+        <p className="text-sm text-gray-500 mb-4">{orderSuccess.message}</p>
+        <div className="bg-yellow-50 rounded-xl p-3 mb-4">
+          <p className="text-xs text-gray-500">Pontos ganhos neste pedido</p>
+          <p className="text-2xl font-bold text-yellow-600">+{orderSuccess.order?.points_earned || 0} pts</p>
+        </div>
+        <button onClick={() => { setOrderSuccess(null); setPage('pedidos') }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm">Ver Meus Pedidos</button>
       </div>
     </div>
-  )
+  ) : null
 
-  // ========== RESGATE PAGE ==========
-  const PixPage = () => (
-    <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #F8D7DA 0%, #FFFFFF 100%)' }} className="px-4 pt-6 pb-6">
-        <h1 className="text-gray-900 font-bold text-xl mb-1">Resgate</h1>
-        <p className="text-gray-500 text-sm">Transfira seu cashback para sua conta</p>
-      </div>
-      <div className="px-4">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-pink-100 text-center mb-4">
-          <p className="text-gray-500 text-sm">Saldo disponivel</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">R$ {user?.cashback_balance?.toFixed(2) || '0.00'}</p>
-          <button className="mt-4 w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold py-3 rounded-xl active:scale-[0.98] transition-transform shadow-lg">
-            Sacar via Pix
-          </button>
+  // Reward Kits Modal
+  const RewardKitsModal = () => showRewardKits ? (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowRewardKits(false)} />
+      <div className="relative bg-white rounded-t-3xl w-full max-w-[430px] max-h-[80vh] overflow-y-auto animate-slide-up">
+        <div className="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-gray-800">Resgatar Premios</h3>
+            <p className="text-xs text-gray-500">Seus pontos: <span className="font-bold text-yellow-600">{user?.points || 0}</span></p>
+          </div>
+          <button onClick={() => setShowRewardKits(false)}><X className="w-5 h-5 text-gray-500" /></button>
         </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <CreditCard className="w-5 h-5 text-pink-500" />
-            <h3 className="text-gray-900 font-bold text-sm">Chave Pix</h3>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-gray-500 text-xs">CPF</p>
-            <p className="text-gray-800 text-sm font-medium">{user?.cpf || '***.***.***-**'}</p>
-          </div>
-        </div>
-
-        <h3 className="text-gray-900 font-bold text-base mb-3">Historico</h3>
-        {[
-          { desc: 'Saque Pix', value: -25.00, date: '10/03/2026' },
-          { desc: 'Cashback - Drogasil', value: 12.50, date: '08/03/2026' },
-          { desc: 'Cashback - Ruby Rose', value: 38.90, date: '05/03/2026' },
-        ].map((t, i) => (
-          <div key={i} className="flex items-center justify-between py-3 border-b border-gray-50">
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${t.value > 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                {t.value > 0 ? <ArrowRight className="w-4 h-4 text-green-600 rotate-[-45deg]" /> : <ArrowRight className="w-4 h-4 text-red-600 rotate-[135deg]" />}
-              </div>
-              <div>
-                <p className="text-gray-800 text-sm font-medium">{t.desc}</p>
-                <p className="text-gray-400 text-[10px]">{t.date}</p>
-              </div>
-            </div>
-            <p className={`font-bold text-sm ${t.value > 0 ? 'text-green-600' : 'text-red-500'}`}>
-              {t.value > 0 ? '+' : ''}R$ {Math.abs(t.value).toFixed(2)}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-
-  // ========== SCANNER MODAL ==========
-  const ScannerModal = () => (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => { setShowScanner(false); setLookupResult(null) }}>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative bg-white w-full max-w-[430px] rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <h2 className="text-gray-900 font-bold text-base">Enviar cupom fiscal</h2>
-          <button onClick={() => { setShowScanner(false); setLookupResult(null) }} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-            <X className="w-4 h-4 text-gray-500" />
-          </button>
-        </div>
-
-        {!lookupResult ? (
-          <div className="p-4">
-            {/* Tab buttons */}
-            <div className="flex gap-2 mb-4">
-              <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gray-50 border border-gray-200">
-                <Camera className="w-4 h-4 text-gray-500" />
-                <span className="text-sm text-gray-500">QR Code</span>
-              </div>
-              <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-pink-50 border border-pink-200">
-                <Keyboard className="w-4 h-4 text-pink-600" />
-                <span className="text-sm text-pink-600 font-medium">Chave manual</span>
-              </div>
-            </div>
-
-            <p className="text-gray-700 text-sm font-medium mb-2">Chave de acesso da NFe (44 digitos)</p>
-            <textarea
-              value={accessKey}
-              onChange={e => setAccessKey(e.target.value)}
-              placeholder="Ex: 35260312345678000195550010001234561001234567"
-              className="w-full h-20 p-3 border border-gray-200 rounded-xl text-sm text-gray-700 resize-none focus:outline-none focus:border-pink-400"
-            />
-            <p className="text-gray-400 text-[10px] mt-1 mb-2">A chave de acesso esta no cupom fiscal, abaixo do codigo de barras. Sao 44 numeros.</p>
-
-            <p className="text-gray-500 text-xs mb-2">Chaves de teste:</p>
-            <div className="flex gap-2 mb-4">
-              <button onClick={() => setAccessKey('35260312345678000195550010001234561001234567')} className="text-xs bg-pink-50 text-pink-600 px-3 py-1 rounded-full font-medium border border-pink-200">Teste 1</button>
-              <button onClick={() => setAccessKey('31260498765432000155650020002345672002345678')} className="text-xs bg-pink-50 text-pink-600 px-3 py-1 rounded-full font-medium border border-pink-200">Teste 2</button>
-            </div>
-
-            <button
-              onClick={submitCupom}
-              disabled={!accessKey.trim() || scanning}
-              className={`w-full py-3.5 rounded-xl font-bold text-white transition-all ${accessKey.trim() && !scanning ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg active:scale-[0.98]' : 'bg-gray-300'}`}
-            >
-              {scanning ? 'Consultando...' : 'Consultar cupom fiscal'}
-            </button>
-          </div>
-        ) : (
-          <div className="p-4">
-            <div className="bg-green-50 rounded-2xl p-5 text-center mb-4 border border-green-200">
-              <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
-                <Check className="w-7 h-7 text-green-600" />
-              </div>
-              <h3 className="text-gray-900 font-bold text-lg">Cupom processado!</h3>
-              <p className="text-green-700 text-sm mt-1">{lookupResult.message}</p>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-gray-400 text-[10px]">Loja</p>
-              <p className="text-gray-900 font-bold">{lookupResult.receipt.store.name}</p>
-              <p className="text-gray-500 text-xs">{lookupResult.receipt.store.city} - {lookupResult.receipt.store.state}</p>
-            </div>
-
-            <div className="flex gap-3 mb-4">
-              <div className="flex-1 bg-green-50 rounded-xl p-3 text-center border border-green-100">
-                <p className="text-green-700 font-bold text-lg">R$ {lookupResult.cashback_earned.toFixed(2)}</p>
-                <p className="text-green-600 text-[10px]">Cashback ganho</p>
-              </div>
-              <div className="flex-1 bg-yellow-50 rounded-xl p-3 text-center border border-yellow-100">
-                <p className="text-yellow-700 font-bold text-lg">+{lookupResult.points_earned}</p>
-                <p className="text-yellow-600 text-[10px]">Pontos</p>
-              </div>
-            </div>
-
-            <h4 className="text-gray-900 font-bold text-sm mb-2">Produtos encontrados</h4>
-            {lookupResult.receipt.items.map((it, i) => (
-              <div key={i} className="flex items-center justify-between py-2.5 border-b border-gray-50">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {it.is_ruby_rose && <Heart className="w-3.5 h-3.5 text-pink-400 flex-shrink-0" />}
-                  <div className="min-w-0">
-                    <p className="text-gray-800 text-xs font-medium truncate">{it.name}</p>
-                    <p className="text-gray-400 text-[10px]">{it.quantity}x R$ {it.unit_price.toFixed(2)}</p>
+        <div className="p-4 space-y-3">
+          {rewardKits.map(k => {
+            const canRedeem = (user?.points || 0) >= k.points_cost
+            return (
+              <div key={k.id} className={`bg-white rounded-xl border p-4 ${canRedeem ? 'border-emerald-200' : 'border-gray-100 opacity-60'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${canRedeem ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                    <Award className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-gray-800">{k.name}</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">{k.description}</p>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-sm font-bold text-yellow-600">{k.points_cost} pontos</span>
+                      <button onClick={() => canRedeem && redeemKit(k.id)} disabled={!canRedeem}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-medium ${canRedeem ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                        {canRedeem ? 'Resgatar' : 'Pontos insuficientes'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="text-right flex-shrink-0 ml-2">
-                  <p className="text-gray-800 text-xs font-medium">R$ {it.total.toFixed(2)}</p>
-                  {it.is_ruby_rose && <p className="text-green-600 text-[10px] font-semibold">+R$ {(it.cashback_value || 0).toFixed(2)}</p>}
-                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // LGPD Consent Banner
+  const LGPDBanner = () => showLGPD ? (
+    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 w-full max-w-[410px] px-3">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4">
+        <div className="flex items-start gap-3">
+          <Shield className="w-5 h-5 text-pink-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <h4 className="text-sm font-bold text-gray-800">Privacidade e Dados</h4>
+            <p className="text-xs text-gray-500 mt-1">Utilizamos seus dados para processar pedidos, calcular pontos e melhorar sua experiencia. Ao continuar, voce concorda com nossa politica de privacidade.</p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => { setShowLGPD(false); localStorage.setItem('lgpd_consent_b2b', 'true'); apiFetch('/api/lgpd/consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ consent_data_collection: true, consent_marketing: true, consent_third_party: false }) }).catch(() => {}) }}
+                className="flex-1 py-2 bg-pink-600 text-white rounded-xl text-xs font-medium">Aceitar</button>
+              <button onClick={() => { setShowPrivacy(true); if (!privacyData) apiFetch('/api/lgpd/privacy-policy').then(r => r.json()).then(setPrivacyData).catch(() => {}) }}
+                className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium">Ler mais</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // Privacy Policy Modal
+  const PrivacyModal = () => showPrivacy ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowPrivacy(false)} />
+      <div className="relative bg-white rounded-3xl w-full max-w-[400px] max-h-[80vh] overflow-y-auto p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-800">{privacyData?.title || 'Politica de Privacidade'}</h3>
+          <button onClick={() => setShowPrivacy(false)}><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        {privacyData?.sections?.map((s: any, i: number) => (
+          <div key={i} className="mb-4">
+            <h4 className="text-sm font-bold text-gray-700">{s.title}</h4>
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">{s.content}</p>
+          </div>
+        )) || <p className="text-sm text-gray-500">Carregando...</p>}
+      </div>
+    </div>
+  ) : null
+
+  // Delete Confirm Modal
+  const DeleteModal = () => showDeleteConfirm ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setShowDeleteConfirm(false)} />
+      <div className="relative bg-white rounded-3xl w-full max-w-[380px] p-6 text-center">
+        <div className="w-14 h-14 mx-auto rounded-full bg-red-100 flex items-center justify-center mb-4"><AlertTriangle className="w-7 h-7 text-red-600" /></div>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Excluir conta?</h3>
+        <p className="text-sm text-gray-500 mb-4">Esta acao e irreversivel. Todos os seus dados, pedidos, pontos e historico serao removidos permanentemente conforme a LGPD.</p>
+        <div className="flex gap-2">
+          <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium">Cancelar</button>
+          <button onClick={async () => { try { await apiFetch('/api/lgpd/data', { method: 'DELETE' }); doLogout() } catch {} }} className="flex-1 py-3 bg-red-600 text-white rounded-xl text-sm font-medium">Excluir</button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // Toast notification
+  const Toast = () => toast ? (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-[380px] w-full px-3 animate-slide-up">
+      <div className="bg-gray-800 text-white rounded-xl px-4 py-3 text-sm text-center shadow-lg">{toast}</div>
+    </div>
+  ) : null
+
+  // ========== ADMIN HELPERS ==========
+  const isAdmin = user?.role === 'admin'
+  const adminFormField = (label: string, key: string, type = 'text', placeholder = '') => (
+    <div className="mb-3">
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <input type={type} placeholder={placeholder || label} value={formData[key] || ''} onChange={e => setFormData(p => ({ ...p, [key]: e.target.value }))} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+    </div>
+  )
+  const adminSelectField = (label: string, key: string, options: { value: string; label: string }[]) => (
+    <div className="mb-3">
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <select value={formData[key] || ''} onChange={e => setFormData(p => ({ ...p, [key]: e.target.value }))} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400">
+        <option value="">Selecione...</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  )
+
+  // Admin API helpers
+  const adminApiCall = async (path: string, method: string, body?: Record<string, unknown>) => {
+    try {
+      const opts: RequestInit = { method, headers: { 'Content-Type': 'application/json' } }
+      if (body) opts.body = JSON.stringify(body)
+      const r = await apiFetch(path, opts)
+      const d = await r.json()
+      showToast(d.message || 'Operacao realizada com sucesso')
+      return d
+    } catch (e: unknown) { showToast((e as Error).message); return null }
+  }
+
+  // ========== ADMIN DASHBOARD PAGE ==========
+  const AdminDashPage = () => (
+    <div className="animate-fade-in p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">Painel Administrativo</h1>
+          <p className="text-xs text-gray-500">Visao geral da plataforma</p>
+        </div>
+        <button onClick={() => { fetchAdminStats(); showToast('Dados atualizados') }} className="p-2 bg-pink-50 rounded-xl"><RefreshCw className="w-4 h-4 text-pink-600" /></button>
+      </div>
+
+      {adminStats ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {[
+              { label: 'Usuarios', value: adminStats.total_users, icon: Users, color: 'bg-blue-50 text-blue-600' },
+              { label: 'Lojas', value: adminStats.total_stores, icon: MapPin, color: 'bg-emerald-50 text-emerald-600' },
+              { label: 'Pedidos', value: adminStats.total_orders, icon: Package, color: 'bg-purple-50 text-purple-600' },
+              { label: 'Receita', value: `R$${adminStats.total_revenue?.toFixed(0)}`, icon: BarChart3, color: 'bg-yellow-50 text-yellow-600' },
+              { label: 'Produtos', value: adminStats.total_products, icon: ShoppingBag, color: 'bg-pink-50 text-pink-600' },
+              { label: 'Desafios Ativos', value: adminStats.active_challenges, icon: Trophy, color: 'bg-orange-50 text-orange-600' },
+              { label: 'Banners', value: `${adminStats.active_banners}/${adminStats.total_banners}`, icon: FileText, color: 'bg-cyan-50 text-cyan-600' },
+              { label: 'Resgates', value: adminStats.total_redemptions, icon: Gift, color: 'bg-rose-50 text-rose-600' },
+            ].map((s, i) => (
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-2`}><s.icon className="w-5 h-5" /></div>
+                <p className="text-xl font-bold text-gray-800">{s.value}</p>
+                <p className="text-xs text-gray-500">{s.label}</p>
               </div>
             ))}
-
-            <button
-              onClick={() => { setShowScanner(false); setLookupResult(null) }}
-              className="w-full mt-4 py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 shadow-lg active:scale-[0.98] transition-transform"
-            >
-              Fechar
-            </button>
           </div>
-        )}
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Usuarios por Perfil</h3>
+            {Object.entries(adminStats.users_by_role || {}).map(([role, count]) => (
+              <div key={role} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <span className="text-sm text-gray-600 capitalize">{role.replace('_', ' ')}</span>
+                <span className="text-sm font-bold text-gray-800">{String(count)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <h3 className="text-sm font-bold text-gray-800 mb-3">Pedidos por Status</h3>
+            {Object.entries(adminStats.orders_by_status || {}).map(([st, count]) => (
+              <div key={st} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <span className={`text-xs px-2 py-1 rounded-lg ${statusColors[st] || 'bg-gray-100 text-gray-600'}`}>{statusLabels[st] || st}</span>
+                <span className="text-sm font-bold text-gray-800">{String(count)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : <div className="text-center py-12 text-gray-400">Carregando dados...</div>}
+
+      {/* Quick nav to admin sections */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        {[
+          { page: 'admin_company' as Page, label: 'Empresa', icon: Settings, desc: 'Configuracoes' },
+          { page: 'admin_users' as Page, label: 'Usuarios', icon: Users, desc: 'Gestao de contas' },
+          { page: 'admin_products' as Page, label: 'Produtos', icon: ShoppingBag, desc: 'Catalogo' },
+          { page: 'admin_banners' as Page, label: 'Banners', icon: FileText, desc: 'Promocionais' },
+          { page: 'admin_orders' as Page, label: 'Pedidos', icon: Package, desc: 'Acompanhamento' },
+          { page: 'admin_logs' as Page, label: 'Seguranca', icon: Shield, desc: 'Logs e atividades' },
+        ].map(item => (
+          <button key={item.label} onClick={() => setPage(item.page)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left hover:border-pink-200 transition">
+            <item.icon className="w-5 h-5 text-pink-600 mb-2" />
+            <p className="text-sm font-bold text-gray-800">{item.label}</p>
+            <p className="text-xs text-gray-500">{item.desc}</p>
+          </button>
+        ))}
       </div>
     </div>
   )
 
-  const pages: Record<Page, JSX.Element> = {
-    inicio: <HomePage />,
-    jogos: <JogosPage />,
-    pix: <PixPage />,
-    notas: <NotasPage />,
-    conta: <ContaPage />,
-  }
-
-  const navItems: { id: Page; label: string; icon: any }[] = [
-    { id: 'inicio', label: 'Inicio', icon: Home },
-    { id: 'jogos', label: 'Premios', icon: Gift },
-    { id: 'pix', label: 'Resgatar', icon: DollarSign },
-    { id: 'notas', label: 'Cupons', icon: Receipt },
-    { id: 'conta', label: 'Perfil', icon: User },
-  ]
-
-  return (
-    <div className="app-container">
-      <div className="main-scroll">
-        {pages[page]}
+  // ========== ADMIN USERS PAGE ==========
+  const AdminUsersPage = () => (
+    <div className="animate-fade-in p-4">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
+        <h2 className="text-lg font-bold text-gray-800">Gestao de Usuarios</h2>
+        <button onClick={() => { setShowCreateForm(true); setFormData({ role: 'promotora', status: 'active' }) }} className="bg-pink-600 text-white rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-1"><Plus className="w-3 h-3" />Novo</button>
       </div>
 
-      {/* Bottom Navigation - Ruby Rose branded */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 pb-2 pt-1.5 z-40" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
-        <div className="flex justify-around">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setPage(item.id)}
-              className={`flex flex-col items-center py-1 px-3 transition-all ${page === item.id ? 'text-rose-600' : 'text-gray-400'}`}
-            >
-              <item.icon className={`w-5 h-5 ${page === item.id ? 'text-rose-600' : 'text-gray-400'}`} />
-              <span className={`text-[10px] mt-0.5 font-medium ${page === item.id ? 'text-rose-600' : 'text-gray-400'}`}>{item.label}</span>
-              {page === item.id && <div className="w-1 h-1 rounded-full bg-rose-600 mt-0.5" />}
-            </button>
+      <div className="space-y-3">
+        {adminUsers.map((u: Record<string, string>) => (
+          <div key={u.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center"><User className="w-5 h-5 text-pink-600" /></div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">{u.name}</p>
+                  <p className="text-xs text-gray-500">{u.email}</p>
+                </div>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-lg ${u.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg capitalize">{(u.role || '').replace('_', ' ')}</span>
+              <div className="flex gap-2">
+                <button onClick={async () => { await adminApiCall(`/api/admin/users/${u.id}/toggle`, 'PATCH'); fetchAdminUsers() }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><ToggleLeft className="w-4 h-4 text-gray-600" /></button>
+                <button onClick={() => { setEditingItem({ type: 'user', ...u }); setFormData({ name: u.name, phone: u.phone || '', role: u.role, status: u.status, store_cnpj: u.store_cnpj || '' }) }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><Edit3 className="w-4 h-4 text-gray-600" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create User Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
+          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Novo Usuario</h3>
+              <button onClick={() => setShowCreateForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome completo', 'name', 'text', 'Nome do usuario')}
+            {adminFormField('Email', 'email', 'email', 'email@exemplo.com')}
+            {adminFormField('Senha', 'password', 'password', 'Senha inicial')}
+            {adminFormField('Telefone', 'phone', 'tel', '(11) 99999-9999')}
+            {adminFormField('CPF', 'cpf', 'text', '000.000.000-00')}
+            {adminSelectField('Perfil', 'role', [{ value: 'promotora', label: 'Promotora' }, { value: 'gerente_loja', label: 'Gerente de Loja' }, { value: 'vendedor_ruby', label: 'Vendedor Ruby Rose' }, { value: 'admin', label: 'Administrador' }])}
+            {adminFormField('CNPJ da Loja', 'store_cnpj', 'text', '00.000.000/0001-00')}
+            <button onClick={async () => {
+              const d = await adminApiCall('/api/admin/users', 'POST', { name: formData.name, email: formData.email, password: formData.password, phone: formData.phone, cpf: formData.cpf, role: formData.role, store_cnpj: formData.store_cnpj, status: 'active' })
+              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminUsers() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Criar Usuario</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingItem?.type === 'user' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
+          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Editar Usuario</h3>
+              <button onClick={() => setEditingItem(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome', 'name')}
+            {adminFormField('Telefone', 'phone', 'tel')}
+            {adminSelectField('Perfil', 'role', [{ value: 'promotora', label: 'Promotora' }, { value: 'gerente_loja', label: 'Gerente de Loja' }, { value: 'vendedor_ruby', label: 'Vendedor Ruby Rose' }, { value: 'admin', label: 'Administrador' }])}
+            {adminSelectField('Status', 'status', [{ value: 'active', label: 'Ativo' }, { value: 'inactive', label: 'Inativo' }])}
+            {adminFormField('CNPJ da Loja', 'store_cnpj')}
+            <button onClick={async () => {
+              const d = await adminApiCall(`/api/admin/users/${editingItem.id}`, 'PUT', { name: formData.name, phone: formData.phone, role: formData.role, status: formData.status, store_cnpj: formData.store_cnpj })
+              if (d) { setEditingItem(null); setFormData({}); fetchAdminUsers() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Alteracoes</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // ========== ADMIN PRODUCTS PAGE ==========
+  const AdminProductsPage = () => (
+    <div className="animate-fade-in p-4">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
+        <h2 className="text-lg font-bold text-gray-800">Gestao de Produtos</h2>
+        <button onClick={() => { setShowCreateForm(true); setFormData({ min_order: '1', stock_available: 'true', category: 'Maquiagem' }) }} className="bg-pink-600 text-white rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-1"><Plus className="w-3 h-3" />Novo</button>
+      </div>
+
+      <div className="space-y-3">
+        {adminProducts.map((p: Record<string, unknown>) => (
+          <div key={String(p.id)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm font-bold text-gray-800">{String(p.name)}</p>
+                <p className="text-xs text-gray-500">EAN: {String(p.ean)} | Min: {String(p.min_order)} un</p>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-lg ${p.stock_available ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{p.stock_available ? 'Disponivel' : 'Indisponivel'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-bold text-pink-600">R${Number(p.price).toFixed(2)}</span>
+                <span className="text-xs text-gray-400 ml-2">{String(p.category)}</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={async () => { await adminApiCall(`/api/admin/products/${p.id}/toggle`, 'PATCH'); fetchAdminProducts() }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><ToggleLeft className="w-4 h-4 text-gray-600" /></button>
+                <button onClick={() => { setEditingItem({ type: 'product', ...p }); setFormData({ name: String(p.name), ean: String(p.ean || ''), price: String(p.price), category: String(p.category), description: String(p.description || ''), min_order: String(p.min_order), image: String(p.image || '') }) }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><Edit3 className="w-4 h-4 text-gray-600" /></button>
+                <button onClick={async () => { if (confirm('Remover este produto?')) { await adminApiCall(`/api/admin/products/${p.id}`, 'DELETE'); fetchAdminProducts() } }} className="p-1.5 bg-red-50 rounded-lg hover:bg-red-100"><Trash2 className="w-4 h-4 text-red-600" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create Product Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
+          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Novo Produto</h3>
+              <button onClick={() => setShowCreateForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome do produto', 'name')}
+            {adminFormField('Codigo EAN', 'ean')}
+            {adminFormField('Preco (R$)', 'price', 'number', '0.00')}
+            {adminSelectField('Categoria', 'category', [{ value: 'Maquiagem', label: 'Maquiagem' }, { value: 'Skincare', label: 'Skincare' }, { value: 'Unhas', label: 'Unhas' }, { value: 'Acessorios', label: 'Acessorios' }, { value: 'Cabelos', label: 'Cabelos' }])}
+            {adminFormField('Descricao', 'description')}
+            {adminFormField('Pedido minimo', 'min_order', 'number', '1')}
+            {adminFormField('URL da imagem', 'image', 'url')}
+            <button onClick={async () => {
+              const d = await adminApiCall('/api/admin/products', 'POST', { name: formData.name, ean: formData.ean, price: parseFloat(formData.price), category: formData.category, description: formData.description, min_order: parseInt(formData.min_order) || 1, image: formData.image, stock_available: true })
+              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminProducts() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Criar Produto</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {editingItem?.type === 'product' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
+          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Editar Produto</h3>
+              <button onClick={() => setEditingItem(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Nome', 'name')}
+            {adminFormField('Codigo EAN', 'ean')}
+            {adminFormField('Preco (R$)', 'price', 'number')}
+            {adminSelectField('Categoria', 'category', [{ value: 'Maquiagem', label: 'Maquiagem' }, { value: 'Skincare', label: 'Skincare' }, { value: 'Unhas', label: 'Unhas' }, { value: 'Acessorios', label: 'Acessorios' }, { value: 'Cabelos', label: 'Cabelos' }])}
+            {adminFormField('Descricao', 'description')}
+            {adminFormField('Pedido minimo', 'min_order', 'number')}
+            {adminFormField('URL da imagem', 'image', 'url')}
+            <button onClick={async () => {
+              const d = await adminApiCall(`/api/admin/products/${editingItem.id}`, 'PUT', { name: formData.name, ean: formData.ean, price: parseFloat(formData.price), category: formData.category, description: formData.description, min_order: parseInt(formData.min_order) || 1, image: formData.image })
+              if (d) { setEditingItem(null); setFormData({}); fetchAdminProducts() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Alteracoes</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // ========== ADMIN BANNERS PAGE ==========
+  const AdminBannersPage = () => (
+    <div className="animate-fade-in p-4">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
+        <h2 className="text-lg font-bold text-gray-800">Gestao de Banners</h2>
+        <button onClick={() => { setShowCreateForm(true); setFormData({ position: 'home', active: 'true' }) }} className="bg-pink-600 text-white rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-1"><Plus className="w-3 h-3" />Novo</button>
+      </div>
+
+      <div className="space-y-3">
+        {adminBanners.map((b: Record<string, unknown>) => (
+          <div key={String(b.id)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm font-bold text-gray-800">{String(b.title)}</p>
+                <p className="text-xs text-gray-500">Posicao: {String(b.position)} | Ordem: {String(b.order)}</p>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-lg ${b.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{b.active ? 'Ativo' : 'Inativo'}</span>
+            </div>
+            {Boolean(b.image_url) && <div className="w-full h-20 bg-gray-100 rounded-xl mb-2 flex items-center justify-center overflow-hidden"><img src={String(b.image_url)} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /></div>}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">{b.start_date ? `${String(b.start_date).slice(0, 10)} - ${String(b.end_date || '').slice(0, 10)}` : 'Sem periodo definido'}</span>
+              <div className="flex gap-2">
+                <button onClick={async () => { await adminApiCall(`/api/admin/banners/${b.id}/toggle`, 'PATCH'); fetchAdminBanners() }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><ToggleLeft className="w-4 h-4 text-gray-600" /></button>
+                <button onClick={async () => { if (confirm('Remover este banner?')) { await adminApiCall(`/api/admin/banners/${b.id}`, 'DELETE'); fetchAdminBanners() } }} className="p-1.5 bg-red-50 rounded-lg hover:bg-red-100"><Trash2 className="w-4 h-4 text-red-600" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {adminBanners.length === 0 && <p className="text-center text-gray-400 py-8">Nenhum banner cadastrado</p>}
+      </div>
+
+      {/* Create Banner Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
+          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Novo Banner</h3>
+              <button onClick={() => setShowCreateForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            {adminFormField('Titulo', 'title')}
+            {adminFormField('Subtitulo', 'subtitle')}
+            {adminFormField('URL da imagem', 'image_url', 'url')}
+            {adminFormField('Cor de fundo', 'bg_color', 'text', '#BE185D')}
+            {adminSelectField('Posicao', 'position', [{ value: 'home', label: 'Home' }, { value: 'catalogo', label: 'Catalogo' }, { value: 'destaque', label: 'Destaque' }])}
+            {adminFormField('Data inicio', 'start_date', 'date')}
+            {adminFormField('Data fim', 'end_date', 'date')}
+            <button onClick={async () => {
+              const d = await adminApiCall('/api/admin/banners', 'POST', { title: formData.title, subtitle: formData.subtitle, image_url: formData.image_url, bg_color: formData.bg_color || '#BE185D', position: formData.position || 'home', start_date: formData.start_date || null, end_date: formData.end_date || null })
+              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminBanners() }
+            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Criar Banner</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // ========== ADMIN ORDERS PAGE ==========
+  const AdminOrdersPage = () => (
+    <div className="animate-fade-in p-4">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
+        <h2 className="text-lg font-bold text-gray-800">Gestao de Pedidos</h2>
+        <button onClick={() => fetchAdminOrders()} className="p-2 bg-pink-50 rounded-xl"><RefreshCw className="w-4 h-4 text-pink-600" /></button>
+      </div>
+
+      {adminOrders?.stats && (
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-gray-100">
+            <p className="text-lg font-bold text-gray-800">{adminOrders.stats.total}</p>
+            <p className="text-[10px] text-gray-500">Total</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-gray-100">
+            <p className="text-lg font-bold text-pink-600">R${adminOrders.stats.total_value?.toFixed(0)}</p>
+            <p className="text-[10px] text-gray-500">Valor Total</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-gray-100">
+            <p className="text-lg font-bold text-emerald-600">{adminOrders.stats.by_status?.entregue || 0}</p>
+            <p className="text-[10px] text-gray-500">Entregues</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {(adminOrders?.orders || []).map((o: Record<string, unknown>) => {
+          const StatusIcon = statusIcons[String(o.status)] || Package
+          return (
+            <div key={String(o.id)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon className="w-4 h-4 text-gray-600" />
+                  <p className="text-sm font-bold text-gray-800">Pedido #{String(o.id).slice(-6)}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-lg ${statusColors[String(o.status)] || 'bg-gray-100'}`}>{statusLabels[String(o.status)] || String(o.status)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>Vendedora: {String(o.user_name || '—')}</span>
+                <span className="font-bold text-gray-800">R${Number(o.total_value).toFixed(2)}</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{String(o.created_at || '').slice(0, 16).replace('T', ' ')}</p>
+            </div>
+          )
+        })}
+        {(!adminOrders?.orders || adminOrders.orders.length === 0) && <p className="text-center text-gray-400 py-8">Nenhum pedido encontrado</p>}
+      </div>
+    </div>
+  )
+
+  // ========== ADMIN COMPANY SETTINGS PAGE ==========
+  const AdminCompanyPage = () => {
+    const [companyForm, setCompanyForm] = useState(adminCompany || {})
+    const updateField = (key: string, val: string) => setCompanyForm((p: Record<string, string>) => ({ ...p, [key]: val }))
+
+    return (
+      <div className="animate-fade-in p-4">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
+          <h2 className="text-lg font-bold text-gray-800">Configuracoes da Empresa</h2>
+          <div className="w-16" />
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Nome da empresa</label>
+            <input value={companyForm.name || ''} onChange={e => updateField('name', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">URL do logotipo</label>
+            <input value={companyForm.logo_url || ''} onChange={e => updateField('logo_url', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Cor primaria</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={companyForm.primary_color || '#BE185D'} onChange={e => updateField('primary_color', e.target.value)} className="w-10 h-10 rounded-lg border-0 cursor-pointer" />
+                <input value={companyForm.primary_color || ''} onChange={e => updateField('primary_color', e.target.value)} className="flex-1 py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Cor secundaria</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={companyForm.secondary_color || '#EC4899'} onChange={e => updateField('secondary_color', e.target.value)} className="w-10 h-10 rounded-lg border-0 cursor-pointer" />
+                <input value={companyForm.secondary_color || ''} onChange={e => updateField('secondary_color', e.target.value)} className="flex-1 py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email de contato</label>
+            <input type="email" value={companyForm.contact_email || ''} onChange={e => updateField('contact_email', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
+            <input value={companyForm.contact_phone || ''} onChange={e => updateField('contact_phone', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ</label>
+            <input value={companyForm.cnpj || ''} onChange={e => updateField('cnpj', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Endereco</label>
+            <input value={companyForm.address || ''} onChange={e => updateField('address', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Website</label>
+            <input value={companyForm.website || ''} onChange={e => updateField('website', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Sobre a empresa</label>
+            <textarea rows={3} value={companyForm.about || ''} onChange={e => updateField('about', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400 resize-none" />
+          </div>
+
+          <button onClick={async () => {
+            const d = await adminApiCall('/api/admin/company', 'PUT', companyForm)
+            if (d) { fetchAdminCompany(); showToast('Configuracoes salvas com sucesso!') }
+          }} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Configuracoes</button>
+
+          {adminCompany?.updated_at && <p className="text-xs text-gray-400 text-center mt-2">Ultima atualizacao: {adminCompany.updated_at.slice(0, 16).replace('T', ' ')}</p>}
+        </div>
+      </div>
+    )
+  }
+
+  // ========== ADMIN LOGS / SECURITY PAGE ==========
+  const AdminLogsPage = () => (
+    <div className="animate-fade-in p-4">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
+        <h2 className="text-lg font-bold text-gray-800">Seguranca e Logs</h2>
+        <button onClick={() => fetchAdminLogs()} className="p-2 bg-pink-50 rounded-xl"><RefreshCw className="w-4 h-4 text-pink-600" /></button>
+      </div>
+
+      {/* Permissions matrix */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+        <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2"><Lock className="w-4 h-4 text-pink-600" />Permissoes por Perfil</h3>
+        <div className="space-y-2">
+          {[
+            { role: 'admin', perms: ['Acesso total', 'Gestao de usuarios', 'Configuracoes', 'Logs'] },
+            { role: 'vendedor_ruby', perms: ['Dashboard', 'Ver promotoras', 'Relatorios'] },
+            { role: 'gerente_loja', perms: ['Dashboard', 'Pedidos da loja', 'Promotoras da loja'] },
+            { role: 'promotora', perms: ['Catalogo', 'Fazer pedidos', 'Desafios', 'Resgatar premios'] },
+          ].map(item => (
+            <div key={item.role} className="border border-gray-100 rounded-xl p-3">
+              <p className="text-sm font-bold text-gray-800 capitalize mb-1">{item.role.replace('_', ' ')}</p>
+              <div className="flex flex-wrap gap-1">
+                {item.perms.map(p => <span key={p} className="text-[10px] bg-pink-50 text-pink-600 px-2 py-0.5 rounded-full">{p}</span>)}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {showScanner && <ScannerModal />}
-      <LGPDConsentBanner />
-      {showPrivacyPolicy && <PrivacyPolicyModal />}
-      {showDeleteConfirm && <DeleteConfirmModal />}
+      {/* Activity logs */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-pink-600" />Logs de Atividade</h3>
+        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          {adminLogs.map((log: Record<string, string>, i: number) => (
+            <div key={i} className="border-b border-gray-50 pb-2 last:border-0">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-800">{log.action?.replace('_', ' ')}</p>
+                <span className="text-[10px] text-gray-400">{(log.timestamp || '').slice(0, 16).replace('T', ' ')}</span>
+              </div>
+              <p className="text-xs text-gray-500">{log.user_name} — {log.details}</p>
+            </div>
+          ))}
+          {adminLogs.length === 0 && <p className="text-center text-gray-400 py-4">Nenhuma atividade registrada</p>}
+        </div>
+      </div>
+    </div>
+  )
+
+
+  // ========== MAIN LAYOUT ==========
+  const isAdminPage = page.startsWith('admin_')
+
+  const pages: Record<Page, () => JSX.Element> = {
+    inicio: HomePage,
+    catalogo: CatalogoPage,
+    pedidos: PedidosPage,
+    desafios: DesafiosPage,
+    perfil: PerfilPage,
+    admin_dash: AdminDashPage,
+    admin_users: AdminUsersPage,
+    admin_products: AdminProductsPage,
+    admin_banners: AdminBannersPage,
+    admin_orders: AdminOrdersPage,
+    admin_company: AdminCompanyPage,
+    admin_logs: AdminLogsPage,
+  }
+
+  const navItems: { id: Page; icon: any; label: string }[] = isAdminPage ? [
+    { id: 'admin_dash', icon: BarChart3, label: 'Dashboard' },
+    { id: 'admin_users', icon: Users, label: 'Usuarios' },
+    { id: 'admin_products', icon: ShoppingBag, label: 'Produtos' },
+    { id: 'admin_orders', icon: Package, label: 'Pedidos' },
+    { id: 'inicio', icon: Home, label: 'App' },
+  ] : [
+    { id: 'inicio', icon: Home, label: 'Inicio' },
+    { id: 'catalogo', icon: ShoppingCart, label: 'Catalogo' },
+    { id: 'pedidos', icon: Package, label: 'Pedidos' },
+    { id: 'desafios', icon: Trophy, label: 'Desafios' },
+    ...(isAdmin ? [{ id: 'admin_dash' as Page, icon: Settings, label: 'Admin' }] : [{ id: 'perfil' as Page, icon: User, label: 'Perfil' }]),
+  ]
+
+  const CurrentPage = pages[page] || HomePage
+
+  return (
+    <div className="app-container">
+      <div className="main-scroll">
+        <CurrentPage />
+      </div>
+
+      {/* Cart floating button */}
+      {cart.length > 0 && !showCart && !isAdminPage && (
+        <button onClick={() => setShowCart(true)} className="fixed bottom-24 right-4 z-30 bg-pink-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg">
+          <ShoppingCart className="w-6 h-6" />
+          <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>
+        </button>
+      )}
+
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 px-2 py-1.5 flex items-center justify-around z-20">
+        {navItems.map(item => {
+          const active = page === item.id
+          return (
+            <button key={item.id} onClick={() => setPage(item.id)} className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition ${active ? 'text-pink-600' : 'text-gray-400'}`}>
+              <item.icon className={`w-5 h-5 ${active ? 'text-pink-600' : 'text-gray-400'}`} />
+              <span className={`text-[10px] ${active ? 'font-semibold text-pink-600' : 'text-gray-400'}`}>{item.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Modals */}
+      <CartModal />
+      <OrderDetailModal />
+      <OrderSuccessModal />
+      <RewardKitsModal />
+      <LGPDBanner />
+      <PrivacyModal />
+      <DeleteModal />
+      <Toast />
     </div>
   )
 }
