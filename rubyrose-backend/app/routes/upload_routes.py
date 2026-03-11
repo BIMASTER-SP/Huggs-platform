@@ -47,7 +47,7 @@ async def upload_image(
     filename = f"{uuid.uuid4().hex}.{ext}"
 
     # Save locally (future: S3 upload)
-    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), UPLOAD_DIR)
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), UPLOAD_DIR)
     os.makedirs(upload_dir, exist_ok=True)
     filepath = os.path.join(upload_dir, filename)
     with open(filepath, "wb") as f:
@@ -93,7 +93,7 @@ async def admin_upload_image(
 
     ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
     filename = f"{uuid.uuid4().hex}.{ext}"
-    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), UPLOAD_DIR)
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), UPLOAD_DIR)
     os.makedirs(upload_dir, exist_ok=True)
     filepath = os.path.join(upload_dir, filename)
     with open(filepath, "wb") as f:

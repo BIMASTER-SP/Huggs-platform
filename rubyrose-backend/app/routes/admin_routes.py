@@ -426,6 +426,7 @@ def admin_list_integrations(
         if safe.get("api_key"):
             key = safe["api_key"]
             safe["api_key_masked"] = key[:3] + "***" + key[-3:] if len(key) > 6 else "***"
+            del safe["api_key"]
         else:
             safe["api_key_masked"] = ""
         safe_list.append(safe)

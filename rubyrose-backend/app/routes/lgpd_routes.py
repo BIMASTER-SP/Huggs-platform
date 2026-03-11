@@ -42,7 +42,7 @@ def submit_consent(req: LGPDConsentRequest, user: dict = Depends(require_auth)):
         "consent_third_party": req.consent_third_party,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    user["lgpd_consent"] = True
+    user["lgpd_consent"] = req.consent_data_collection
     user["lgpd_consent_date"] = datetime.now(timezone.utc).isoformat()
     return success_response(message="Consentimento registrado com sucesso")
 
