@@ -42,8 +42,14 @@ async def upload_image(
             detail=f"Arquivo muito grande ({len(content) / 1024 / 1024:.1f}MB). Maximo: {MAX_IMAGE_SIZE / 1024 / 1024:.0f}MB",
         )
 
-    # Generate unique filename
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
+    # Generate unique filename with validated extension
+    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Extensao de arquivo nao permitida: .{ext}. Use: .jpg, .jpeg, .png, .webp ou .gif",
+        )
     filename = f"{uuid.uuid4().hex}.{ext}"
 
     # Save locally (future: S3 upload)
@@ -91,7 +97,10 @@ async def admin_upload_image(
     if len(content) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=400, detail="Arquivo muito grande. Maximo: 5MB")
 
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
+    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Extensao nao permitida: .{ext}")
     filename = f"{uuid.uuid4().hex}.{ext}"
     upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), UPLOAD_DIR)
     os.makedirs(upload_dir, exist_ok=True)
