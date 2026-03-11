@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
-import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, Edit3, ToggleLeft, Save, RefreshCw, Lock, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Power, Eye, Upload, Wifi, WifiOff } from 'lucide-react'
+import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 
 const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// Extract basic auth from URL if present (tunnels use user:pass@host format)
 let API = RAW_API
 let tunnelAuth: string | null = null
 try {
@@ -25,28 +25,16 @@ const apiFetch = async (path: string, opts?: RequestInit) => {
   if (authToken) headers['X-Auth-Token'] = authToken
   if (!tunnelAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`
   const res = await fetch(`${API}${path}`, { ...opts, headers })
-  if (res.status === 401) {
-    authToken = null
-    localStorage.removeItem('auth_token')
-    window.location.reload()
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Erro de conexao' }))
-    throw new Error(err.detail || `Erro ${res.status}`)
-  }
+  if (res.status === 401) { authToken = null; localStorage.removeItem('auth_token'); window.location.reload() }
+  if (!res.ok) { const err = await res.json().catch(() => ({ message: 'Erro de conexao' })); throw new Error(err.message || err.detail || `Erro ${res.status}`) }
   return res
 }
 
 type Page = 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil' | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders' | 'admin_company' | 'admin_logs' | 'admin_stock' | 'admin_images' | 'admin_integrations'
 
-interface CartItem {
-  product_id: number
-  name: string
-  price: number
-  quantity: number
-  min_order: number
-  image: string
-}
+interface CartItem { product_id: number; name: string; price: number; quantity: number; min_order: number; image: string }
+
+const CHART_COLORS = ['#BE185D', '#EC4899', '#F472B6', '#FB923C', '#A78BFA', '#34D399', '#60A5FA', '#FBBF24']
 
 function App() {
   const [page, setPage] = useState<Page>('inicio')
@@ -75,7 +63,6 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [orderSuccess, setOrderSuccess] = useState<any>(null)
-  // Admin state
   const [adminStats, setAdminStats] = useState<any>(null)
   const [adminUsers, setAdminUsers] = useState<any[]>([])
   const [adminProducts, setAdminProducts] = useState<any[]>([])
@@ -83,241 +70,144 @@ function App() {
   const [adminOrders, setAdminOrders] = useState<any>(null)
   const [adminCompany, setAdminCompany] = useState<any>(null)
   const [adminLogs, setAdminLogs] = useState<any[]>([])
-  const [editingItem, setEditingItem] = useState<any>(null)
+  const [_editingItem, setEditingItem] = useState<any>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [formData, setFormData] = useState<Record<string, string>>({})
-  // New admin modules state
   const [adminStock, setAdminStock] = useState<any[]>([])
   const [adminImages, setAdminImages] = useState<any[]>([])
   const [adminIntegrations, setAdminIntegrations] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [adminSearchQuery, setAdminSearchQuery] = useState('')
+  const [adminPage, setAdminPage] = useState(1)
+  const [adminTotalPages, setAdminTotalPages] = useState(1)
+  const [adminFilterRole, setAdminFilterRole] = useState('')
+  const [adminFilterStatus, setAdminFilterStatus] = useState('')
+  const [adminFilterCategory, setAdminFilterCategory] = useState('')
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+  const unwrap = (resp: any) => resp.data !== undefined ? resp.data : resp
 
   const doLogin = async () => {
     setLoginLoading(true); setLoginError('')
     try {
       const loginHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
       if (tunnelAuth) loginHeaders['Authorization'] = `Basic ${tunnelAuth}`
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST', headers: loginHeaders as HeadersInit,
-        body: JSON.stringify({ email: loginEmail, password: loginPassword })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Erro no login')
-      authToken = data.token
-      localStorage.setItem('auth_token', data.token)
-      setUser(data.user)
-      setIsLoggedIn(true)
+      const res = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: loginHeaders as HeadersInit, body: JSON.stringify({ email: loginEmail, password: loginPassword }) })
+      const resp = await res.json()
+      if (!res.ok) throw new Error(resp.message || resp.detail || 'Erro no login')
+      const data = resp.data || resp
+      authToken = data.token; localStorage.setItem('auth_token', data.token); setUser(data.user); setIsLoggedIn(true)
       if (!localStorage.getItem('lgpd_consent_b2b')) setShowLGPD(true)
     } catch (e: any) { setLoginError(e.message) }
     setLoginLoading(false)
   }
 
-  const doLogout = () => {
-    authToken = null
-    localStorage.removeItem('auth_token')
-    setIsLoggedIn(false); setUser(null); setDashboard(null)
-    setCart([]); setOrders([]); setChallenges([])
-  }
+  const doLogout = () => { authToken = null; localStorage.removeItem('auth_token'); setIsLoggedIn(false); setUser(null); setDashboard(null); setCart([]); setOrders([]); setChallenges([]) }
 
-  const fetchDashboard = useCallback(async () => {
-    if (!authToken) return
-    try {
-      const res = await apiFetch('/api/dashboard')
-      const d = await res.json()
-      setDashboard(d); setUser(d.user)
-    } catch { }
-  }, [])
+  const fetchDashboard = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/dashboard'); const resp = await res.json(); const d = unwrap(resp); setDashboard(d); setUser(d.user) } catch { } }, [])
+  const fetchCatalog = useCallback(async (cat?: string) => { try { const q = cat && cat !== 'Todas' ? `?category=${encodeURIComponent(cat)}` : ''; const res = await apiFetch(`/api/catalog${q}`); const resp = await res.json(); const d = unwrap(resp); setCatalog(Array.isArray(d) ? d : resp.data || []) } catch { } }, [])
+  const fetchCategories = useCallback(async () => { try { const res = await apiFetch('/api/catalog/categories'); const resp = await res.json(); const d = unwrap(resp); setCategories(d.categories || d || []) } catch { } }, [])
+  const fetchOrders = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/orders'); const resp = await res.json(); const d = unwrap(resp); setOrders(Array.isArray(d) ? d : d.orders || []) } catch { } }, [])
+  const fetchChallenges = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/challenges'); const resp = await res.json(); const d = unwrap(resp); setChallenges(d.challenges || d || []) } catch { } }, [])
+  const fetchRewardKits = useCallback(async () => { try { const res = await apiFetch('/api/rewards/kits'); const resp = await res.json(); const d = unwrap(resp); setRewardKits(d.kits || d || []) } catch { } }, [])
 
-  const fetchCatalog = useCallback(async (cat?: string) => {
-    try {
-      const q = cat && cat !== 'Todas' ? `?category=${encodeURIComponent(cat)}` : ''
-      const res = await apiFetch(`/api/catalog${q}`)
-      const d = await res.json()
-      setCatalog(d.products)
-    } catch { }
-  }, [])
+  const fetchAdminStats = useCallback(async () => { try { const r = await apiFetch('/api/admin/stats'); const resp = await r.json(); setAdminStats(unwrap(resp)) } catch { } }, [])
+  const fetchAdminUsers = useCallback(async (pg = 1, search = '', role = '', status = '') => { try { const p = new URLSearchParams({ page: String(pg), per_page: '20' }); if (search) p.set('search', search); if (role) p.set('role', role); if (status) p.set('status', status); const r = await apiFetch(`/api/admin/users?${p}`); const resp = await r.json(); setAdminUsers(unwrap(resp) || []); if (resp.pagination) { setAdminTotalPages(resp.pagination.total_pages); setAdminPage(resp.pagination.page) } } catch { } }, [])
+  const fetchAdminProducts = useCallback(async (pg = 1, search = '', category = '') => { try { const p = new URLSearchParams({ page: String(pg), per_page: '20' }); if (search) p.set('search', search); if (category) p.set('category', category); const r = await apiFetch(`/api/admin/products?${p}`); const resp = await r.json(); setAdminProducts(unwrap(resp) || []); if (resp.pagination) { setAdminTotalPages(resp.pagination.total_pages); setAdminPage(resp.pagination.page) } } catch { } }, [])
+  const fetchAdminBanners = useCallback(async () => { try { const r = await apiFetch('/api/admin/banners'); const resp = await r.json(); const d = unwrap(resp); setAdminBanners(Array.isArray(d) ? d : d.banners || []) } catch { } }, [])
+  const fetchAdminOrders = useCallback(async (pg = 1, search = '', status = '') => { try { const p = new URLSearchParams({ page: String(pg), per_page: '20' }); if (search) p.set('search', search); if (status) p.set('status', status); const r = await apiFetch(`/api/admin/orders?${p}`); const resp = await r.json(); setAdminOrders({ orders: unwrap(resp) || [], pagination: resp.pagination }) } catch { } }, [])
+  const fetchAdminCompany = useCallback(async () => { try { const r = await apiFetch('/api/admin/company'); const resp = await r.json(); setAdminCompany(unwrap(resp)) } catch { } }, [])
+  const fetchAdminLogs = useCallback(async (pg = 1, search = '') => { try { const p = new URLSearchParams({ page: String(pg), per_page: '50' }); if (search) p.set('search', search); const r = await apiFetch(`/api/admin/logs?${p}`); const resp = await r.json(); setAdminLogs(unwrap(resp) || []) } catch { } }, [])
+  const fetchAdminStock = useCallback(async (pg = 1, search = '') => { try { const p = new URLSearchParams({ page: String(pg), per_page: '20' }); if (search) p.set('search', search); const r = await apiFetch(`/api/admin/stock?${p}`); const resp = await r.json(); setAdminStock(unwrap(resp) || []) } catch { } }, [])
+  const fetchAdminImages = useCallback(async (pg = 1, search = '') => { try { const p = new URLSearchParams({ page: String(pg), per_page: '20' }); if (search) p.set('search', search); const r = await apiFetch(`/api/admin/images?${p}`); const resp = await r.json(); setAdminImages(unwrap(resp) || []) } catch { } }, [])
+  const fetchAdminIntegrations = useCallback(async () => { try { const r = await apiFetch('/api/admin/integrations'); const resp = await r.json(); setAdminIntegrations(unwrap(resp) || []) } catch { } }, [])
 
-  const fetchCategories = useCallback(async () => {
-    try {
-      const res = await apiFetch('/api/catalog/categories')
-      const d = await res.json()
-      setCategories(d.categories)
-    } catch { }
-  }, [])
-
-  const fetchOrders = useCallback(async () => {
-    if (!authToken) return
-    try {
-      const res = await apiFetch('/api/orders')
-      const d = await res.json()
-      setOrders(d.orders)
-    } catch { }
-  }, [])
-
-  const fetchChallenges = useCallback(async () => {
-    if (!authToken) return
-    try {
-      const res = await apiFetch('/api/challenges')
-      const d = await res.json()
-      setChallenges(d.challenges)
-    } catch { }
-  }, [])
-
-  const fetchRewardKits = useCallback(async () => {
-    try {
-      const res = await apiFetch('/api/rewards/kits')
-      const d = await res.json()
-      setRewardKits(d.kits)
-    } catch { }
-  }, [])
-
-  // Admin fetchers
-  const fetchAdminStats = useCallback(async () => { try { const r = await apiFetch('/api/admin/stats'); setAdminStats(await r.json()) } catch { } }, [])
-  const fetchAdminUsers = useCallback(async () => { try { const r = await apiFetch('/api/admin/users'); const d = await r.json(); setAdminUsers(d.users) } catch { } }, [])
-  const fetchAdminProducts = useCallback(async () => { try { const r = await apiFetch('/api/admin/products'); const d = await r.json(); setAdminProducts(d.products) } catch { } }, [])
-  const fetchAdminBanners = useCallback(async () => { try { const r = await apiFetch('/api/admin/banners'); const d = await r.json(); setAdminBanners(Array.isArray(d) ? d : d.banners || []) } catch { } }, [])
-  const fetchAdminOrders = useCallback(async () => { try { const r = await apiFetch('/api/admin/orders'); setAdminOrders(await r.json()) } catch { } }, [])
-  const fetchAdminCompany = useCallback(async () => { try { const r = await apiFetch('/api/admin/company'); setAdminCompany(await r.json()) } catch { } }, [])
-  const fetchAdminLogs = useCallback(async () => { try { const r = await apiFetch('/api/admin/logs'); const d = await r.json(); setAdminLogs(d.logs) } catch { } }, [])
-  const fetchAdminStock = useCallback(async () => { try { const r = await apiFetch('/api/admin/stock'); const d = await r.json(); setAdminStock(d.stock) } catch { } }, [])
-  const fetchAdminImages = useCallback(async () => { try { const r = await apiFetch('/api/admin/images'); const d = await r.json(); setAdminImages(d.images) } catch { } }, [])
-  const fetchAdminIntegrations = useCallback(async () => { try { const r = await apiFetch('/api/admin/integrations'); const d = await r.json(); setAdminIntegrations(d.integrations) } catch { } }, [])
-
-  useEffect(() => {
-    if (isLoggedIn) {
-      fetchDashboard(); fetchCatalog(); fetchCategories()
-      fetchOrders(); fetchChallenges(); fetchRewardKits()
-    }
-  }, [isLoggedIn, fetchDashboard, fetchCatalog, fetchCategories, fetchOrders, fetchChallenges, fetchRewardKits])
+  useEffect(() => { if (isLoggedIn) { fetchDashboard(); fetchCatalog(); fetchCategories(); fetchOrders(); fetchChallenges(); fetchRewardKits() } }, [isLoggedIn, fetchDashboard, fetchCatalog, fetchCategories, fetchOrders, fetchChallenges, fetchRewardKits])
 
   useEffect(() => {
     if (isLoggedIn && user?.role === 'admin' && page.startsWith('admin_')) {
-      fetchAdminStats(); fetchAdminUsers(); fetchAdminProducts()
-      fetchAdminBanners(); fetchAdminOrders(); fetchAdminCompany(); fetchAdminLogs()
-      fetchAdminStock(); fetchAdminImages(); fetchAdminIntegrations()
+      fetchAdminStats()
+      if (page === 'admin_users') fetchAdminUsers(1, adminSearchQuery, adminFilterRole, adminFilterStatus)
+      if (page === 'admin_products') fetchAdminProducts(1, adminSearchQuery, adminFilterCategory)
+      if (page === 'admin_banners') fetchAdminBanners()
+      if (page === 'admin_orders') fetchAdminOrders(1, adminSearchQuery, adminFilterStatus)
+      if (page === 'admin_company') fetchAdminCompany()
+      if (page === 'admin_logs') fetchAdminLogs(1, adminSearchQuery)
+      if (page === 'admin_stock') fetchAdminStock(1, adminSearchQuery)
+      if (page === 'admin_images') fetchAdminImages(1, adminSearchQuery)
+      if (page === 'admin_integrations') fetchAdminIntegrations()
     }
-  }, [isLoggedIn, user?.role, page, fetchAdminStats, fetchAdminUsers, fetchAdminProducts, fetchAdminBanners, fetchAdminOrders, fetchAdminCompany, fetchAdminLogs, fetchAdminStock, fetchAdminImages, fetchAdminIntegrations])
+    setAdminSearchQuery(''); setAdminPage(1); setAdminFilterRole(''); setAdminFilterStatus(''); setAdminFilterCategory('')
+  }, [isLoggedIn, user?.role, page])
 
-  useEffect(() => {
-    if (dashboard?.banners?.length > 1) {
-      const t = setInterval(() => setCurrentBanner(b => (b + 1) % dashboard.banners.length), 4000)
-      return () => clearInterval(t)
-    }
-  }, [dashboard?.banners])
+  useEffect(() => { if (dashboard?.banners?.length > 1) { const t = setInterval(() => setCurrentBanner(b => (b + 1) % dashboard.banners.length), 4000); return () => clearInterval(t) } }, [dashboard?.banners])
 
-  const addToCart = (product: any) => {
-    setCart(prev => {
-      const existing = prev.find(i => i.product_id === product.id)
-      if (existing) {
-        return prev.map(i => i.product_id === product.id ? { ...i, quantity: i.quantity + product.min_order } : i)
-      }
-      return [...prev, { product_id: product.id, name: product.name, price: product.price, quantity: product.min_order, min_order: product.min_order, image: product.image }]
-    })
-    showToast(`${product.name} adicionado ao carrinho`)
-  }
+  const addToCart = (product: any) => { setCart(prev => { const existing = prev.find(i => i.product_id === product.id); if (existing) return prev.map(i => i.product_id === product.id ? { ...i, quantity: i.quantity + product.min_order } : i); return [...prev, { product_id: product.id, name: product.name, price: product.price, quantity: product.min_order, min_order: product.min_order, image: product.image }] }); showToast(`${product.name} adicionado ao carrinho`) }
+  const updateCartQty = (productId: number, delta: number) => { setCart(prev => prev.map(i => { if (i.product_id !== productId) return i; const newQty = i.quantity + delta; return newQty >= i.min_order ? { ...i, quantity: newQty } : i }).filter(i => i.quantity >= i.min_order)) }
+  const removeFromCart = (productId: number) => { setCart(prev => prev.filter(i => i.product_id !== productId)) }
 
-  const updateCartQty = (productId: number, delta: number) => {
-    setCart(prev => prev.map(i => {
-      if (i.product_id !== productId) return i
-      const newQty = i.quantity + delta
-      return newQty >= i.min_order ? { ...i, quantity: newQty } : i
-    }).filter(i => i.quantity >= i.min_order))
-  }
+  const submitOrder = async () => { if (cart.length === 0) return; try { const res = await apiFetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })) }) }); const resp = await res.json(); setOrderSuccess(unwrap(resp)); setCart([]); setShowCart(false); fetchOrders(); fetchDashboard() } catch (e: any) { showToast(e.message) } }
+  const submitChallenge = async (challengeId: string) => { try { const res = await apiFetch('/api/challenges/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge_id: challengeId, notes: 'Foto da vitrine enviada via app' }) }); const resp = await res.json(); showToast(resp.message || 'Enviado!'); fetchChallenges(); fetchDashboard() } catch (e: any) { showToast(e.message) } }
+  const redeemKit = async (kitId: string) => { try { const res = await apiFetch('/api/rewards/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kit_id: kitId }) }); const resp = await res.json(); showToast(resp.message || 'Resgatado!'); fetchDashboard(); fetchRewardKits() } catch (e: any) { showToast(e.message) } }
 
-  const removeFromCart = (productId: number) => {
-    setCart(prev => prev.filter(i => i.product_id !== productId))
-  }
-
-  const submitOrder = async () => {
-    if (cart.length === 0) return
-    try {
-      const res = await apiFetch('/api/orders', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })) })
-      })
-      const data = await res.json()
-      setOrderSuccess(data)
-      setCart([]); setShowCart(false)
-      fetchOrders(); fetchDashboard()
-    } catch (e: any) { showToast(e.message) }
-  }
-
-  const submitChallenge = async (challengeId: string) => {
-    try {
-      const res = await apiFetch('/api/challenges/submit', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge_id: challengeId, notes: 'Foto da vitrine enviada via app' })
-      })
-      const data = await res.json()
-      showToast(data.message)
-      fetchChallenges(); fetchDashboard()
-    } catch (e: any) { showToast(e.message) }
-  }
-
-  const redeemKit = async (kitId: string) => {
-    try {
-      const res = await apiFetch('/api/rewards/redeem', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kit_id: kitId })
-      })
-      const data = await res.json()
-      showToast(data.message)
-      fetchDashboard(); fetchRewardKits()
-    } catch (e: any) { showToast(e.message) }
+  const handleImageUpload = async (file: File): Promise<string | null> => {
+    if (!file) return null
+    if (file.size > 5 * 1024 * 1024) { showToast('Arquivo muito grande. Max: 5MB'); return null }
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) { showToast('Tipo nao permitido'); return null }
+    setUploading(true)
+    try { const fd = new FormData(); fd.append('file', file); const res = await apiFetch('/api/upload', { method: 'POST', body: fd }); const resp = await res.json(); setUploading(false); return unwrap(resp)?.url || null } catch (e: any) { showToast(e.message); setUploading(false); return null }
   }
 
   const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0)
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
+  const statusColors: Record<string, string> = { enviado: 'bg-blue-100 text-blue-700', aprovado: 'bg-emerald-100 text-emerald-700', em_separacao: 'bg-yellow-100 text-yellow-700', em_transito: 'bg-purple-100 text-purple-700', entregue: 'bg-green-100 text-green-700', cancelado: 'bg-red-100 text-red-700' }
+  const statusLabels: Record<string, string> = { enviado: 'Enviado', aprovado: 'Aprovado', em_separacao: 'Em Separacao', em_transito: 'Em Transito', entregue: 'Entregue', cancelado: 'Cancelado' }
+  const statusIcons: Record<string, any> = { enviado: Send, aprovado: CheckCircle, em_separacao: Package, em_transito: Truck, entregue: Check, cancelado: X }
 
-  const statusColors: Record<string, string> = {
-    enviado: 'bg-blue-100 text-blue-700', aprovado: 'bg-emerald-100 text-emerald-700',
-    em_separacao: 'bg-yellow-100 text-yellow-700', em_transito: 'bg-purple-100 text-purple-700',
-    entregue: 'bg-green-100 text-green-700', cancelado: 'bg-red-100 text-red-700',
-  }
-  const statusLabels: Record<string, string> = {
-    enviado: 'Enviado', aprovado: 'Aprovado', em_separacao: 'Em Separacao',
-    em_transito: 'Em Transito', entregue: 'Entregue', cancelado: 'Cancelado',
-  }
-  const statusIcons: Record<string, any> = {
-    enviado: Send, aprovado: CheckCircle, em_separacao: Package,
-    em_transito: Truck, entregue: Check, cancelado: X,
+  // Pagination component
+  const PaginationControls = ({ currentPage, totalPages, onPageChange }: { currentPage: number, totalPages: number, onPageChange: (p: number) => void }) => {
+    if (totalPages <= 1) return null
+    return (<div className="flex items-center justify-center gap-2 mt-4 pb-2">
+      <button onClick={() => onPageChange(Math.max(1, currentPage - 1))} disabled={currentPage <= 1} className="p-2 rounded-lg bg-gray-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => { const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4)); const pg = start + i; if (pg > totalPages) return null; return <button key={pg} onClick={() => onPageChange(pg)} className={`w-8 h-8 rounded-lg text-sm font-medium ${pg === currentPage ? 'bg-pink-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>{pg}</button> })}
+      <button onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))} disabled={currentPage >= totalPages} className="p-2 rounded-lg bg-gray-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+      <span className="text-xs text-gray-500 ml-2">{currentPage}/{totalPages}</span>
+    </div>)
   }
 
+  const AdminSearchBar = ({ placeholder, onSearch, filters }: { placeholder?: string, onSearch: (q: string) => void, filters?: React.ReactNode }) => (
+    <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="relative flex-1 min-w-48"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="text" placeholder={placeholder || 'Buscar...'} value={adminSearchQuery} onChange={e => { setAdminSearchQuery(e.target.value); onSearch(e.target.value) }} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-pink-400" /></div>
+      {filters}
+    </div>
+  )
+
+  const ImageUploadZone = ({ onUpload, preview }: { onUpload: (url: string) => void, preview?: string | null }) => (
+    <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-pink-400 transition cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+      <input type="file" ref={fileInputRef} accept="image/jpeg,image/png,image/webp,image/gif" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setUploadPreview(reader.result as string); reader.readAsDataURL(file); const url = await handleImageUpload(file); if (url) onUpload(url) }} className="hidden" />
+      {(preview || uploadPreview) ? (<div><img src={preview || uploadPreview || ''} alt="Preview" className="mx-auto max-h-32 rounded-lg object-cover" /><p className="text-xs text-gray-500 mt-2">{uploading ? 'Enviando...' : 'Clique para trocar'}</p></div>) : (<div><Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" /><p className="text-sm text-gray-500">{uploading ? 'Enviando...' : 'Clique ou arraste uma imagem'}</p><p className="text-xs text-gray-400 mt-1">JPEG, PNG, WebP, GIF - Max 5MB</p></div>)}
+    </div>
+  )
 
   // ========== LOGIN PAGE ==========
   if (!isLoggedIn) return (
-    <div className="app-container">
-      <div className="main-scroll">
-        <div className="min-h-full flex flex-col justify-center px-6 py-12" style={{ background: 'linear-gradient(180deg, #BE185D 0%, #EC4899 50%, #FDF2F8 100%)' }}>
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 mx-auto rounded-full bg-white/20 flex items-center justify-center mb-4">
-              <Sparkles className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-white">Ruby Rose</h1>
-            <p className="text-white/80 text-sm mt-1">Plataforma B2B para Vendedoras</p>
-          </div>
-          <div className="bg-white rounded-3xl p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-gray-800 mb-1">Entrar na conta</h2>
-            <p className="text-sm text-gray-500 mb-4">Use suas credenciais de vendedora</p>
-            {loginError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{loginError}</div>}
-            <input type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-3 focus:outline-none focus:border-pink-400" />
-            <input type="password" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-4 focus:outline-none focus:border-pink-400" />
-            <button onClick={doLogin} disabled={loginLoading} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm hover:bg-pink-700 transition disabled:opacity-50">
-              {loginLoading ? 'Entrando...' : 'Entrar'}
-            </button>
-            <div className="mt-4 text-center">
-              <p className="text-xs text-gray-400">Acesso restrito a vendedoras cadastradas</p>
-              <p className="text-xs text-gray-400 mt-1">Vinculacao por CNPJ da loja parceira</p>
-            </div>
-          </div>
-          <div className="mt-6 text-center">
-            <p className="text-white/60 text-xs">Teste: ana@email.com / ana123</p>
-          </div>
+    <div className="app-container"><div className="main-scroll">
+      <div className="min-h-full flex flex-col justify-center px-6 py-12" style={{ background: 'linear-gradient(180deg, #BE185D 0%, #EC4899 50%, #FDF2F8 100%)' }}>
+        <div className="text-center mb-8"><div className="w-20 h-20 mx-auto rounded-full bg-white/20 flex items-center justify-center mb-4"><Sparkles className="w-10 h-10 text-white" /></div><h1 className="text-3xl font-bold text-white">Ruby Rose</h1><p className="text-white/80 text-sm mt-1">Plataforma B2B para Vendedoras</p></div>
+        <div className="bg-white rounded-3xl p-6 shadow-xl">
+          <h2 className="text-lg font-bold text-gray-800 mb-1">Entrar na conta</h2><p className="text-sm text-gray-500 mb-4">Use suas credenciais de vendedora</p>
+          {loginError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{loginError}</div>}
+          <input type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-3 focus:outline-none focus:border-pink-400" />
+          <input type="password" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-4 focus:outline-none focus:border-pink-400" />
+          <button onClick={doLogin} disabled={loginLoading} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm hover:bg-pink-700 transition disabled:opacity-50">{loginLoading ? 'Entrando...' : 'Entrar'}</button>
+          <div className="mt-4 text-center"><p className="text-xs text-gray-400">Acesso restrito a vendedoras cadastradas</p></div>
         </div>
+        <div className="mt-6 text-center"><p className="text-white/60 text-xs">Teste: ana@email.com / ana123</p></div>
       </div>
-    </div>
+    </div></div>
   )
 
   // ========== HOME / DASHBOARD PAGE ==========
@@ -918,895 +808,349 @@ function App() {
     </div>
   ) : null
 
-  // ========== ADMIN HELPERS ==========
-  const isAdmin = user?.role === 'admin'
+  // ========== ADMIN FORM HELPERS ==========
   const adminFormField = (label: string, key: string, type = 'text', placeholder = '') => (
-    <div className="mb-3">
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <input type={type} placeholder={placeholder || label} value={formData[key] || ''} onChange={e => setFormData(p => ({ ...p, [key]: e.target.value }))} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-    </div>
+    <div className="mb-3"><label className="block text-xs font-medium text-gray-600 mb-1">{label}</label><input type={type} value={formData[key] || ''} onChange={e => setFormData(p => ({ ...p, [key]: e.target.value }))} placeholder={placeholder} className="w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-pink-400" /></div>
   )
-  const adminSelectField = (label: string, key: string, options: { value: string; label: string }[]) => (
-    <div className="mb-3">
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <select value={formData[key] || ''} onChange={e => setFormData(p => ({ ...p, [key]: e.target.value }))} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400">
-        <option value="">Selecione...</option>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
+  const adminSelectField = (label: string, key: string, options: { value: string, label: string }[]) => (
+    <div className="mb-3"><label className="block text-xs font-medium text-gray-600 mb-1">{label}</label><select value={formData[key] || ''} onChange={e => setFormData(p => ({ ...p, [key]: e.target.value }))} className="w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-pink-400">{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
   )
-
-  // Admin API helpers
-  const adminApiCall = async (path: string, method: string, body?: Record<string, unknown>) => {
+  const adminApiCall = async (method: string, url: string, body?: any, successMsg?: string) => {
     try {
       const opts: RequestInit = { method, headers: { 'Content-Type': 'application/json' } }
       if (body) opts.body = JSON.stringify(body)
-      const r = await apiFetch(path, opts)
-      const d = await r.json()
-      showToast(d.message || 'Operacao realizada com sucesso')
-      return d
-    } catch (e: unknown) { showToast((e as Error).message); return null }
+      const res = await apiFetch(url, opts)
+      const resp = await res.json()
+      showToast(resp.message || successMsg || 'Sucesso!')
+      setShowCreateForm(false); setEditingItem(null); setFormData({})
+      return resp
+    } catch (e: any) { showToast(e.message); return null }
   }
 
-  // ========== ADMIN DASHBOARD PAGE ==========
-  const AdminDashPage = () => (
-    <div className="animate-fade-in p-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">Painel Administrativo</h1>
-          <p className="text-xs text-gray-500">Visao geral da plataforma</p>
-        </div>
-        <button onClick={() => { fetchAdminStats(); showToast('Dados atualizados') }} className="p-2 bg-pink-50 rounded-xl"><RefreshCw className="w-4 h-4 text-pink-600" /></button>
-      </div>
-
-      {adminStats ? (
-        <>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            {[
-              { label: 'Usuarios', value: adminStats.total_users, icon: Users, color: 'bg-blue-50 text-blue-600' },
-              { label: 'Lojas', value: adminStats.total_stores, icon: MapPin, color: 'bg-emerald-50 text-emerald-600' },
-              { label: 'Pedidos', value: adminStats.total_orders, icon: Package, color: 'bg-purple-50 text-purple-600' },
-              { label: 'Receita', value: `R$${adminStats.total_revenue?.toFixed(0)}`, icon: BarChart3, color: 'bg-yellow-50 text-yellow-600' },
-              { label: 'Produtos', value: adminStats.total_products, icon: ShoppingBag, color: 'bg-pink-50 text-pink-600' },
-              { label: 'Desafios Ativos', value: adminStats.active_challenges, icon: Trophy, color: 'bg-orange-50 text-orange-600' },
-              { label: 'Banners', value: `${adminStats.active_banners}/${adminStats.total_banners}`, icon: FileText, color: 'bg-cyan-50 text-cyan-600' },
-              { label: 'Resgates', value: adminStats.total_redemptions, icon: Gift, color: 'bg-rose-50 text-rose-600' },
-            ].map((s, i) => (
-              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center mb-2`}><s.icon className="w-5 h-5" /></div>
-                <p className="text-xl font-bold text-gray-800">{s.value}</p>
-                <p className="text-xs text-gray-500">{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">Usuarios por Perfil</h3>
-            {Object.entries(adminStats.users_by_role || {}).map(([role, count]) => (
-              <div key={role} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                <span className="text-sm text-gray-600 capitalize">{role.replace('_', ' ')}</span>
-                <span className="text-sm font-bold text-gray-800">{String(count)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">Pedidos por Status</h3>
-            {Object.entries(adminStats.orders_by_status || {}).map(([st, count]) => (
-              <div key={st} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                <span className={`text-xs px-2 py-1 rounded-lg ${statusColors[st] || 'bg-gray-100 text-gray-600'}`}>{statusLabels[st] || st}</span>
-                <span className="text-sm font-bold text-gray-800">{String(count)}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : <div className="text-center py-12 text-gray-400">Carregando dados...</div>}
-
-      {/* Quick nav to admin sections */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
+  // ========== ADMIN DASHBOARD WITH RECHARTS ==========
+  const AdminDashPage = () => {
+    if (!adminStats) return <div className="p-6 text-center text-gray-500">Carregando...</div>
+    const charts = adminStats.charts || {}
+    return (
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><BarChart3 className="w-6 h-6 text-pink-600" />Dashboard Administrativo</h2>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {[
-          { page: 'admin_products' as Page, label: 'Produtos', icon: ShoppingBag, desc: 'Catalogo e precos' },
-          { page: 'admin_stock' as Page, label: 'Estoque', icon: Database, desc: 'Quantidades e alertas' },
-          { page: 'admin_banners' as Page, label: 'Banners', icon: FileText, desc: 'Promocionais' },
-          { page: 'admin_images' as Page, label: 'Imagens', icon: Image, desc: 'Galeria e uploads' },
-          { page: 'admin_orders' as Page, label: 'Pedidos', icon: Package, desc: 'Acompanhamento' },
-          { page: 'admin_users' as Page, label: 'Usuarios', icon: Users, desc: 'Gestao de contas' },
-          { page: 'admin_integrations' as Page, label: 'Integracoes', icon: Link2, desc: 'APIs e ERPs' },
-          { page: 'admin_company' as Page, label: 'Empresa', icon: Settings, desc: 'Configuracoes' },
-          { page: 'admin_logs' as Page, label: 'Seguranca', icon: Shield, desc: 'Logs e atividades' },
-        ].map(item => (
-          <button key={item.label} onClick={() => setPage(item.page)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left hover:border-pink-200 transition">
-            <item.icon className="w-5 h-5 text-pink-600 mb-2" />
-            <p className="text-sm font-bold text-gray-800">{item.label}</p>
-            <p className="text-xs text-gray-500">{item.desc}</p>
-          </button>
+          { label: 'Usuarios', value: adminStats.total_users, icon: Users, color: 'bg-pink-50 text-pink-600' },
+          { label: 'Pedidos', value: adminStats.total_orders, icon: ShoppingCart, color: 'bg-blue-50 text-blue-600' },
+          { label: 'Receita', value: `R$ ${(adminStats.total_revenue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: TrendingUp, color: 'bg-emerald-50 text-emerald-600' },
+          { label: 'Produtos', value: adminStats.total_products, icon: Package, color: 'bg-purple-50 text-purple-600' },
+          { label: 'Lojas', value: adminStats.total_stores, icon: MapPin, color: 'bg-orange-50 text-orange-600' },
+          { label: 'Desafios', value: adminStats.active_challenges, icon: Trophy, color: 'bg-yellow-50 text-yellow-600' },
+          { label: 'Estoque Baixo', value: adminStats.low_stock_count || 0, icon: AlertTriangle, color: adminStats.low_stock_count > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600' },
+          { label: 'Integracoes', value: `${adminStats.active_integrations || 0}/${adminStats.total_integrations || 0}`, icon: Link2, color: 'bg-indigo-50 text-indigo-600' },
+        ].map((kpi, i) => (
+          <div key={i} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className={`w-10 h-10 rounded-xl ${kpi.color} flex items-center justify-center mb-2`}><kpi.icon className="w-5 h-5" /></div>
+            <p className="text-xs text-gray-500">{kpi.label}</p>
+            <p className="text-lg font-bold text-gray-800">{kpi.value}</p>
+          </div>
         ))}
       </div>
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Sales by Period - Line Chart */}
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-pink-600" />Vendas por Periodo</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={charts.sales_by_period || []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Vendas']} />
+              <Line type="monotone" dataKey="vendas" stroke="#BE185D" strokeWidth={2} dot={{ fill: '#BE185D' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Order Status - Pie Chart */}
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><PieChartIcon className="w-4 h-4 text-blue-600" />Status dos Pedidos</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={charts.orders_by_status || []} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" label={({ name, value }: any) => `${name}: ${value}`}>
+                {(charts.orders_by_status || []).map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Top Products - Bar Chart */}
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-purple-600" />Top Produtos</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={charts.top_products || []} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Valor']} />
+              <Bar dataKey="valor" fill="#A78BFA" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Stock Alerts */}
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-red-500" />Alertas de Estoque</h3>
+          {(charts.stock_alerts || []).length === 0 ? <p className="text-sm text-gray-400 text-center py-8">Nenhum alerta de estoque</p> : (
+            <div className="space-y-2 max-h-52 overflow-y-auto">{(charts.stock_alerts || []).map((item: any, i: number) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                <span className="text-sm text-gray-700">{item.name}</span>
+                <span className="text-sm font-bold text-red-600">{item.quantity} un</span>
+              </div>
+            ))}</div>
+          )}
+        </div>
+      </div>
     </div>
-  )
+  )}
 
-  // ========== ADMIN USERS PAGE ==========
+  // ========== ADMIN USERS PAGE (with search/filters/pagination) ==========
   const AdminUsersPage = () => (
-    <div className="animate-fade-in p-4">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
-        <h2 className="text-lg font-bold text-gray-800">Gestao de Usuarios</h2>
-        <button onClick={() => { setShowCreateForm(true); setFormData({ role: 'promotora', status: 'active' }) }} className="bg-pink-600 text-white rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-1"><Plus className="w-3 h-3" />Novo</button>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users className="w-6 h-6 text-pink-600" />Usuarios</h2>
+        <button onClick={() => { setFormData({ role: 'promotora', status: 'pending' }); setShowCreateForm(true) }} className="px-4 py-2 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-1"><Plus className="w-4 h-4" />Novo</button></div>
+      <AdminSearchBar placeholder="Buscar usuario..." onSearch={q => fetchAdminUsers(1, q, adminFilterRole, adminFilterStatus)} filters={<>
+        <select value={adminFilterRole} onChange={e => { setAdminFilterRole(e.target.value); fetchAdminUsers(1, adminSearchQuery, e.target.value, adminFilterStatus) }} className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"><option value="">Todos perfis</option><option value="admin">Admin</option><option value="promotora">Promotora</option><option value="vendedor_ruby">Vendedor</option><option value="gerente_loja">Gerente</option></select>
+        <select value={adminFilterStatus} onChange={e => { setAdminFilterStatus(e.target.value); fetchAdminUsers(1, adminSearchQuery, adminFilterRole, e.target.value) }} className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"><option value="">Todos status</option><option value="active">Ativo</option><option value="pending">Pendente</option><option value="inactive">Inativo</option></select>
+      </>} />
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="px-4 py-3 text-left">Nome</th><th className="px-4 py-3 text-left">Email</th><th className="px-4 py-3 text-left">Perfil</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-left">Pontos</th><th className="px-4 py-3 text-right">Acoes</th></tr></thead>
+        <tbody>{adminUsers.map((u: any) => (<tr key={u.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+          <td className="px-4 py-3 font-medium">{u.name}</td><td className="px-4 py-3 text-gray-500">{u.email}</td>
+          <td className="px-4 py-3"><span className="px-2 py-1 bg-pink-50 text-pink-700 rounded-lg text-xs">{u.role}</span></td>
+          <td className="px-4 py-3"><span className={`px-2 py-1 rounded-lg text-xs ${u.status === 'active' ? 'bg-green-50 text-green-700' : u.status === 'pending' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>{u.status}</span></td>
+          <td className="px-4 py-3">{u.points}</td>
+          <td className="px-4 py-3 text-right"><div className="flex items-center justify-end gap-1">
+            {u.status === 'pending' && <button onClick={async () => { await adminApiCall('PATCH', `/api/admin/users/${u.id}/approve`); fetchAdminUsers(adminPage, adminSearchQuery) }} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Check className="w-4 h-4" /></button>}
+            <button onClick={async () => { await adminApiCall('PATCH', `/api/admin/users/${u.id}/toggle`); fetchAdminUsers(adminPage, adminSearchQuery) }} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"><ToggleLeft className="w-4 h-4" /></button>
+          </div></td>
+        </tr>))}</tbody></table></div>
       </div>
-
-      <div className="space-y-3">
-        {adminUsers.map((u: Record<string, string>) => (
-          <div key={u.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center"><User className="w-5 h-5 text-pink-600" /></div>
-                <div>
-                  <p className="text-sm font-bold text-gray-800">{u.name}</p>
-                  <p className="text-xs text-gray-500">{u.email}</p>
-                </div>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-lg ${u.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.status === 'active' ? 'Ativo' : 'Inativo'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg capitalize">{(u.role || '').replace('_', ' ')}</span>
-              <div className="flex gap-2">
-                <button onClick={async () => { await adminApiCall(`/api/admin/users/${u.id}/toggle`, 'PATCH'); fetchAdminUsers() }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><ToggleLeft className="w-4 h-4 text-gray-600" /></button>
-                <button onClick={() => { setEditingItem({ type: 'user', ...u }); setFormData({ name: u.name, phone: u.phone || '', role: u.role, status: u.status, store_cnpj: u.store_cnpj || '' }) }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><Edit3 className="w-4 h-4 text-gray-600" /></button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Create User Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
-          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Novo Usuario</h3>
-              <button onClick={() => setShowCreateForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome completo', 'name', 'text', 'Nome do usuario')}
-            {adminFormField('Email', 'email', 'email', 'email@exemplo.com')}
-            {adminFormField('Senha', 'password', 'password', 'Senha inicial')}
-            {adminFormField('Telefone', 'phone', 'tel', '(11) 99999-9999')}
-            {adminFormField('CPF', 'cpf', 'text', '000.000.000-00')}
-            {adminSelectField('Perfil', 'role', [{ value: 'promotora', label: 'Promotora' }, { value: 'gerente_loja', label: 'Gerente de Loja' }, { value: 'vendedor_ruby', label: 'Vendedor Ruby Rose' }, { value: 'admin', label: 'Administrador' }])}
-            {adminFormField('CNPJ da Loja', 'store_cnpj', 'text', '00.000.000/0001-00')}
-            <button onClick={async () => {
-              const d = await adminApiCall('/api/admin/users', 'POST', { name: formData.name, email: formData.email, password: formData.password, phone: formData.phone, cpf: formData.cpf, role: formData.role, store_cnpj: formData.store_cnpj, status: 'active' })
-              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminUsers() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Criar Usuario</button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit User Modal */}
-      {editingItem?.type === 'user' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
-          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Editar Usuario</h3>
-              <button onClick={() => setEditingItem(null)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome', 'name')}
-            {adminFormField('Telefone', 'phone', 'tel')}
-            {adminSelectField('Perfil', 'role', [{ value: 'promotora', label: 'Promotora' }, { value: 'gerente_loja', label: 'Gerente de Loja' }, { value: 'vendedor_ruby', label: 'Vendedor Ruby Rose' }, { value: 'admin', label: 'Administrador' }])}
-            {adminSelectField('Status', 'status', [{ value: 'active', label: 'Ativo' }, { value: 'inactive', label: 'Inativo' }])}
-            {adminFormField('CNPJ da Loja', 'store_cnpj')}
-            <button onClick={async () => {
-              const d = await adminApiCall(`/api/admin/users/${editingItem.id}`, 'PUT', { name: formData.name, phone: formData.phone, role: formData.role, status: formData.status, store_cnpj: formData.store_cnpj })
-              if (d) { setEditingItem(null); setFormData({}); fetchAdminUsers() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Alteracoes</button>
-          </div>
-        </div>
-      )}
+      <PaginationControls currentPage={adminPage} totalPages={adminTotalPages} onPageChange={p => fetchAdminUsers(p, adminSearchQuery, adminFilterRole, adminFilterStatus)} />
+      {showCreateForm && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-screen overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Novo Usuario</h3>
+        {adminFormField('Nome', 'name')}{adminFormField('Email', 'email', 'email')}{adminFormField('Senha', 'password', 'password')}{adminFormField('CPF', 'cpf')}{adminFormField('Telefone', 'phone', 'tel')}
+        {adminSelectField('Perfil', 'role', [{ value: 'promotora', label: 'Promotora' }, { value: 'vendedor_ruby', label: 'Vendedor Ruby' }, { value: 'gerente_loja', label: 'Gerente de Loja' }, { value: 'admin', label: 'Admin' }])}
+        {adminSelectField('Status', 'status', [{ value: 'pending', label: 'Pendente' }, { value: 'active', label: 'Ativo' }])}
+        {adminFormField('CNPJ da Loja', 'store_cnpj')}
+        <div className="flex gap-2 mt-4"><button onClick={() => setShowCreateForm(false)} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { await adminApiCall('POST', '/api/admin/users', formData, 'Usuario criado!'); fetchAdminUsers() }} className="flex-1 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium">Criar</button></div>
+      </div></div>}
     </div>
   )
 
-  // ========== ADMIN PRODUCTS PAGE ==========
+  // ========== ADMIN PRODUCTS PAGE (with search/filters/pagination) ==========
   const AdminProductsPage = () => (
-    <div className="animate-fade-in p-4">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
-        <h2 className="text-lg font-bold text-gray-800">Gestao de Produtos</h2>
-        <button onClick={() => { setShowCreateForm(true); setFormData({ min_order: '1', stock_available: 'true', category: 'Maquiagem' }) }} className="bg-pink-600 text-white rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-1"><Plus className="w-3 h-3" />Novo</button>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Package className="w-6 h-6 text-pink-600" />Produtos</h2>
+        <button onClick={() => { setFormData({ min_order: '6', stock_available: 'true', category: 'Maquiagem' }); setShowCreateForm(true) }} className="px-4 py-2 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-1"><Plus className="w-4 h-4" />Novo</button></div>
+      <AdminSearchBar placeholder="Buscar produto..." onSearch={q => fetchAdminProducts(1, q, adminFilterCategory)} filters={
+        <select value={adminFilterCategory} onChange={e => { setAdminFilterCategory(e.target.value); fetchAdminProducts(1, adminSearchQuery, e.target.value) }} className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"><option value="">Todas categorias</option><option value="Maquiagem">Maquiagem</option><option value="Skincare">Skincare</option><option value="Acessorios">Acessorios</option><option value="Unhas">Unhas</option></select>
+      } />
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="px-4 py-3 text-left">Produto</th><th className="px-4 py-3 text-left">EAN</th><th className="px-4 py-3 text-left">Categoria</th><th className="px-4 py-3 text-right">Preco</th><th className="px-4 py-3 text-center">Ped. Min</th><th className="px-4 py-3 text-center">Disponivel</th><th className="px-4 py-3 text-right">Acoes</th></tr></thead>
+        <tbody>{adminProducts.map((p: any) => (<tr key={p.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+          <td className="px-4 py-3 font-medium">{p.name}</td><td className="px-4 py-3 text-gray-500 text-xs">{p.ean}</td>
+          <td className="px-4 py-3"><span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs">{p.category}</span></td>
+          <td className="px-4 py-3 text-right font-medium">R$ {p.price?.toFixed(2)}</td><td className="px-4 py-3 text-center">{p.min_order}</td>
+          <td className="px-4 py-3 text-center">{p.stock_available ? <Check className="w-4 h-4 text-green-600 mx-auto" /> : <X className="w-4 h-4 text-red-600 mx-auto" />}</td>
+          <td className="px-4 py-3 text-right"><div className="flex items-center justify-end gap-1">
+            <button onClick={async () => { await adminApiCall('PATCH', `/api/admin/products/${p.id}/toggle`); fetchAdminProducts(adminPage, adminSearchQuery) }} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"><ToggleLeft className="w-4 h-4" /></button>
+            <button onClick={async () => { await adminApiCall('DELETE', `/api/admin/products/${p.id}`); fetchAdminProducts(adminPage, adminSearchQuery) }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+          </div></td>
+        </tr>))}</tbody></table></div>
       </div>
-
-      <div className="space-y-3">
-        {adminProducts.map((p: Record<string, unknown>) => (
-          <div key={String(p.id)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-sm font-bold text-gray-800">{String(p.name)}</p>
-                <p className="text-xs text-gray-500">EAN: {String(p.ean)} | Min: {String(p.min_order)} un</p>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-lg ${p.stock_available ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{p.stock_available ? 'Disponivel' : 'Indisponivel'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-sm font-bold text-pink-600">R${Number(p.price).toFixed(2)}</span>
-                <span className="text-xs text-gray-400 ml-2">{String(p.category)}</span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={async () => { await adminApiCall(`/api/admin/products/${p.id}/toggle`, 'PATCH'); fetchAdminProducts() }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><ToggleLeft className="w-4 h-4 text-gray-600" /></button>
-                <button onClick={() => { setEditingItem({ type: 'product', ...p }); setFormData({ name: String(p.name), ean: String(p.ean || ''), price: String(p.price), category: String(p.category), description: String(p.description || ''), min_order: String(p.min_order), image: String(p.image || '') }) }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><Edit3 className="w-4 h-4 text-gray-600" /></button>
-                <button onClick={async () => { if (confirm('Remover este produto?')) { await adminApiCall(`/api/admin/products/${p.id}`, 'DELETE'); fetchAdminProducts() } }} className="p-1.5 bg-red-50 rounded-lg hover:bg-red-100"><Trash2 className="w-4 h-4 text-red-600" /></button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Create Product Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
-          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Novo Produto</h3>
-              <button onClick={() => setShowCreateForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome do produto', 'name')}
-            {adminFormField('Codigo EAN', 'ean')}
-            {adminFormField('Preco (R$)', 'price', 'number', '0.00')}
-            {adminSelectField('Categoria', 'category', [{ value: 'Maquiagem', label: 'Maquiagem' }, { value: 'Skincare', label: 'Skincare' }, { value: 'Unhas', label: 'Unhas' }, { value: 'Acessorios', label: 'Acessorios' }, { value: 'Cabelos', label: 'Cabelos' }])}
-            {adminFormField('Descricao', 'description')}
-            {adminFormField('Pedido minimo', 'min_order', 'number', '1')}
-            {adminFormField('URL da imagem', 'image', 'url')}
-            <button onClick={async () => {
-              const d = await adminApiCall('/api/admin/products', 'POST', { name: formData.name, ean: formData.ean, price: parseFloat(formData.price), category: formData.category, description: formData.description, min_order: parseInt(formData.min_order) || 1, image: formData.image, stock_available: true })
-              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminProducts() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Criar Produto</button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Product Modal */}
-      {editingItem?.type === 'product' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
-          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Editar Produto</h3>
-              <button onClick={() => setEditingItem(null)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome', 'name')}
-            {adminFormField('Codigo EAN', 'ean')}
-            {adminFormField('Preco (R$)', 'price', 'number')}
-            {adminSelectField('Categoria', 'category', [{ value: 'Maquiagem', label: 'Maquiagem' }, { value: 'Skincare', label: 'Skincare' }, { value: 'Unhas', label: 'Unhas' }, { value: 'Acessorios', label: 'Acessorios' }, { value: 'Cabelos', label: 'Cabelos' }])}
-            {adminFormField('Descricao', 'description')}
-            {adminFormField('Pedido minimo', 'min_order', 'number')}
-            {adminFormField('URL da imagem', 'image', 'url')}
-            <button onClick={async () => {
-              const d = await adminApiCall(`/api/admin/products/${editingItem.id}`, 'PUT', { name: formData.name, ean: formData.ean, price: parseFloat(formData.price), category: formData.category, description: formData.description, min_order: parseInt(formData.min_order) || 1, image: formData.image })
-              if (d) { setEditingItem(null); setFormData({}); fetchAdminProducts() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Alteracoes</button>
-          </div>
-        </div>
-      )}
+      <PaginationControls currentPage={adminPage} totalPages={adminTotalPages} onPageChange={p => fetchAdminProducts(p, adminSearchQuery, adminFilterCategory)} />
+      {showCreateForm && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-screen overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Novo Produto</h3>
+        {adminFormField('Nome', 'name')}{adminFormField('EAN', 'ean')}{adminFormField('Preco', 'price', 'number')}{adminFormField('Descricao', 'description')}{adminFormField('Pedido Minimo', 'min_order', 'number')}
+        {adminSelectField('Categoria', 'category', [{ value: 'Maquiagem', label: 'Maquiagem' }, { value: 'Skincare', label: 'Skincare' }, { value: 'Acessorios', label: 'Acessorios' }, { value: 'Unhas', label: 'Unhas' }])}
+        <div className="mb-3"><label className="block text-xs font-medium text-gray-600 mb-1">Imagem do Produto</label><ImageUploadZone onUpload={url => setFormData(p => ({ ...p, image: url }))} preview={formData.image} /></div>
+        <div className="flex gap-2 mt-4"><button onClick={() => setShowCreateForm(false)} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { const fd = { ...formData, price: parseFloat(formData.price || '0'), min_order: parseInt(formData.min_order || '6'), stock_available: true }; await adminApiCall('POST', '/api/admin/products', fd); fetchAdminProducts() }} className="flex-1 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium">Criar</button></div>
+      </div></div>}
     </div>
   )
 
   // ========== ADMIN BANNERS PAGE ==========
   const AdminBannersPage = () => (
-    <div className="animate-fade-in p-4">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
-        <h2 className="text-lg font-bold text-gray-800">Gestao de Banners</h2>
-        <button onClick={() => { setShowCreateForm(true); setFormData({ position: 'home', active: 'true' }) }} className="bg-pink-600 text-white rounded-xl px-3 py-2 text-xs font-medium flex items-center gap-1"><Plus className="w-3 h-3" />Novo</button>
-      </div>
-
-      <div className="space-y-3">
-        {adminBanners.map((b: Record<string, unknown>) => (
-          <div key={String(b.id)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-sm font-bold text-gray-800">{String(b.title)}</p>
-                <p className="text-xs text-gray-500">Posicao: {String(b.position)} | Ordem: {String(b.order)}</p>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-lg ${b.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{b.active ? 'Ativo' : 'Inativo'}</span>
-            </div>
-            {Boolean(b.image_url) && <div className="w-full h-20 bg-gray-100 rounded-xl mb-2 flex items-center justify-center overflow-hidden"><img src={String(b.image_url)} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /></div>}
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">{b.start_date ? `${String(b.start_date).slice(0, 10)} - ${String(b.end_date || '').slice(0, 10)}` : 'Sem periodo definido'}</span>
-              <div className="flex gap-2">
-                <button onClick={async () => { await adminApiCall(`/api/admin/banners/${b.id}/toggle`, 'PATCH'); fetchAdminBanners() }} className="p-1.5 bg-gray-50 rounded-lg hover:bg-gray-100"><ToggleLeft className="w-4 h-4 text-gray-600" /></button>
-                <button onClick={async () => { if (confirm('Remover este banner?')) { await adminApiCall(`/api/admin/banners/${b.id}`, 'DELETE'); fetchAdminBanners() } }} className="p-1.5 bg-red-50 rounded-lg hover:bg-red-100"><Trash2 className="w-4 h-4 text-red-600" /></button>
-              </div>
-            </div>
-          </div>
-        ))}
-        {adminBanners.length === 0 && <p className="text-center text-gray-400 py-8">Nenhum banner cadastrado</p>}
-      </div>
-
-      {/* Create Banner Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
-          <div className="relative bg-white rounded-3xl w-full max-w-[400px] p-6 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Novo Banner</h3>
-              <button onClick={() => setShowCreateForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Titulo', 'title')}
-            {adminFormField('Subtitulo', 'subtitle')}
-            {adminFormField('URL da imagem', 'image_url', 'url')}
-            {adminFormField('Cor de fundo', 'bg_color', 'text', '#BE185D')}
-            {adminSelectField('Posicao', 'position', [{ value: 'home', label: 'Home' }, { value: 'catalogo', label: 'Catalogo' }, { value: 'destaque', label: 'Destaque' }])}
-            {adminFormField('Data inicio', 'start_date', 'date')}
-            {adminFormField('Data fim', 'end_date', 'date')}
-            <button onClick={async () => {
-              const d = await adminApiCall('/api/admin/banners', 'POST', { title: formData.title, subtitle: formData.subtitle, image_url: formData.image_url, bg_color: formData.bg_color || '#BE185D', position: formData.position || 'home', start_date: formData.start_date || null, end_date: formData.end_date || null })
-              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminBanners() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Criar Banner</button>
-          </div>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><BookOpen className="w-6 h-6 text-pink-600" />Banners</h2>
+        <button onClick={() => { setFormData({ color: 'rose', position: '1', active: 'true' }); setShowCreateForm(true) }} className="px-4 py-2 bg-pink-600 text-white rounded-xl text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" />Novo</button></div>
+      <div className="space-y-3">{adminBanners.map((b: any) => (
+        <div key={b.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center justify-between">
+          <div><h3 className="font-medium text-gray-800">{b.title}</h3><p className="text-sm text-gray-500">{b.subtitle}</p><div className="flex items-center gap-2 mt-1"><span className={`px-2 py-0.5 rounded text-xs ${b.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{b.active ? 'Ativo' : 'Inativo'}</span><span className="text-xs text-gray-400">Pos: {b.position}</span><span className={`w-3 h-3 rounded-full bg-${b.color}-400`} /></div></div>
+          <div className="flex gap-1"><button onClick={async () => { await adminApiCall('PATCH', `/api/admin/banners/${b.id}/toggle`); fetchAdminBanners() }} className="p-2 hover:bg-gray-100 rounded-lg"><ToggleLeft className="w-4 h-4 text-gray-500" /></button>
+            <button onClick={async () => { await adminApiCall('DELETE', `/api/admin/banners/${b.id}`); fetchAdminBanners() }} className="p-2 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4 text-red-500" /></button></div>
         </div>
-      )}
+      ))}</div>
+      {showCreateForm && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-screen overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Novo Banner</h3>
+        {adminFormField('Titulo', 'title')}{adminFormField('Subtitulo', 'subtitle')}{adminFormField('Descricao', 'description')}{adminFormField('Posicao', 'position', 'number')}
+        {adminSelectField('Cor', 'color', [{ value: 'rose', label: 'Rosa' }, { value: 'purple', label: 'Roxo' }, { value: 'emerald', label: 'Verde' }, { value: 'blue', label: 'Azul' }])}
+        <div className="flex gap-2 mt-4"><button onClick={() => setShowCreateForm(false)} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { await adminApiCall('POST', '/api/admin/banners', { ...formData, position: parseInt(formData.position || '1'), active: true, highlight: false }); fetchAdminBanners() }} className="flex-1 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium">Criar</button></div>
+      </div></div>}
     </div>
   )
 
-  // ========== ADMIN ORDERS PAGE ==========
-  const AdminOrdersPage = () => (
-    <div className="animate-fade-in p-4">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
-        <h2 className="text-lg font-bold text-gray-800">Gestao de Pedidos</h2>
-        <button onClick={() => fetchAdminOrders()} className="p-2 bg-pink-50 rounded-xl"><RefreshCw className="w-4 h-4 text-pink-600" /></button>
-      </div>
-
-      {adminOrders?.stats && (
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-gray-100">
-            <p className="text-lg font-bold text-gray-800">{adminOrders.stats.total}</p>
-            <p className="text-[10px] text-gray-500">Total</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-gray-100">
-            <p className="text-lg font-bold text-pink-600">R${adminOrders.stats.total_value?.toFixed(0)}</p>
-            <p className="text-[10px] text-gray-500">Valor Total</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-gray-100">
-            <p className="text-lg font-bold text-emerald-600">{adminOrders.stats.by_status?.entregue || 0}</p>
-            <p className="text-[10px] text-gray-500">Entregues</p>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {(adminOrders?.orders || []).map((o: Record<string, unknown>) => {
-          const StatusIcon = statusIcons[String(o.status)] || Package
-          return (
-            <div key={String(o.id)} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <StatusIcon className="w-4 h-4 text-gray-600" />
-                  <p className="text-sm font-bold text-gray-800">Pedido #{String(o.id).slice(-6)}</p>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-lg ${statusColors[String(o.status)] || 'bg-gray-100'}`}>{statusLabels[String(o.status)] || String(o.status)}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>Vendedora: {String(o.user_name || '—')}</span>
-                <span className="font-bold text-gray-800">R${Number(o.total_value).toFixed(2)}</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">{String(o.created_at || '').slice(0, 16).replace('T', ' ')}</p>
-            </div>
-          )
-        })}
-        {(!adminOrders?.orders || adminOrders.orders.length === 0) && <p className="text-center text-gray-400 py-8">Nenhum pedido encontrado</p>}
-      </div>
-    </div>
-  )
-
-  // ========== ADMIN COMPANY SETTINGS PAGE ==========
-  const AdminCompanyPage = () => {
-    const [companyForm, setCompanyForm] = useState(adminCompany || {})
-    const updateField = (key: string, val: string) => setCompanyForm((p: Record<string, string>) => ({ ...p, [key]: val }))
-
+  // ========== ADMIN ORDERS PAGE (with search/filters/pagination) ==========
+  const AdminOrdersPage = () => {
+    const ordersList = adminOrders?.orders || []
     return (
-      <div className="animate-fade-in p-4">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
-          <h2 className="text-lg font-bold text-gray-800">Configuracoes da Empresa</h2>
-          <div className="w-16" />
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nome da empresa</label>
-            <input value={companyForm.name || ''} onChange={e => updateField('name', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">URL do logotipo</label>
-            <input value={companyForm.logo_url || ''} onChange={e => updateField('logo_url', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Cor primaria</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={companyForm.primary_color || '#BE185D'} onChange={e => updateField('primary_color', e.target.value)} className="w-10 h-10 rounded-lg border-0 cursor-pointer" />
-                <input value={companyForm.primary_color || ''} onChange={e => updateField('primary_color', e.target.value)} className="flex-1 py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Cor secundaria</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={companyForm.secondary_color || '#EC4899'} onChange={e => updateField('secondary_color', e.target.value)} className="w-10 h-10 rounded-lg border-0 cursor-pointer" />
-                <input value={companyForm.secondary_color || ''} onChange={e => updateField('secondary_color', e.target.value)} className="flex-1 py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email de contato</label>
-            <input type="email" value={companyForm.contact_email || ''} onChange={e => updateField('contact_email', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
-            <input value={companyForm.contact_phone || ''} onChange={e => updateField('contact_phone', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ</label>
-            <input value={companyForm.cnpj || ''} onChange={e => updateField('cnpj', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Endereco</label>
-            <input value={companyForm.address || ''} onChange={e => updateField('address', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Website</label>
-            <input value={companyForm.website || ''} onChange={e => updateField('website', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Sobre a empresa</label>
-            <textarea rows={3} value={companyForm.about || ''} onChange={e => updateField('about', e.target.value)} className="w-full py-2.5 px-3 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-pink-400 resize-none" />
-          </div>
-
-          <button onClick={async () => {
-            const d = await adminApiCall('/api/admin/company', 'PUT', companyForm)
-            if (d) { fetchAdminCompany(); showToast('Configuracoes salvas com sucesso!') }
-          }} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-2 flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Configuracoes</button>
-
-          {adminCompany?.updated_at && <p className="text-xs text-gray-400 text-center mt-2">Ultima atualizacao: {adminCompany.updated_at.slice(0, 16).replace('T', ' ')}</p>}
-        </div>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><ShoppingCart className="w-6 h-6 text-pink-600" />Pedidos</h2>
+      <AdminSearchBar placeholder="Buscar pedido..." onSearch={q => fetchAdminOrders(1, q, adminFilterStatus)} filters={
+        <select value={adminFilterStatus} onChange={e => { setAdminFilterStatus(e.target.value); fetchAdminOrders(1, adminSearchQuery, e.target.value) }} className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"><option value="">Todos status</option><option value="enviado">Enviado</option><option value="aprovado">Aprovado</option><option value="em_separacao">Em Separacao</option><option value="em_transito">Em Transito</option><option value="entregue">Entregue</option><option value="cancelado">Cancelado</option></select>
+      } />
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="px-4 py-3 text-left">ID</th><th className="px-4 py-3 text-left">Loja</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-right">Valor</th><th className="px-4 py-3 text-left">Data</th></tr></thead>
+        <tbody>{ordersList.map((o: any) => (<tr key={o.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+          <td className="px-4 py-3 text-xs font-mono">{o.id?.slice(0, 12)}</td><td className="px-4 py-3">{o.store_name}</td>
+          <td className="px-4 py-3"><span className={`px-2 py-1 rounded-lg text-xs ${statusColors[o.status] || 'bg-gray-100'}`}>{statusLabels[o.status] || o.status}</span></td>
+          <td className="px-4 py-3 text-right font-medium">R$ {o.total_value?.toFixed(2)}</td><td className="px-4 py-3 text-xs text-gray-500">{o.created_at?.slice(0, 10)}</td>
+        </tr>))}</tbody></table></div>
       </div>
-    )
-  }
+      {adminOrders?.pagination && <PaginationControls currentPage={adminOrders.pagination.page} totalPages={adminOrders.pagination.total_pages} onPageChange={p => fetchAdminOrders(p, adminSearchQuery, adminFilterStatus)} />}
+    </div>
+  )}
 
-  // ========== ADMIN LOGS / SECURITY PAGE ==========
+  // ========== ADMIN COMPANY SETTINGS ==========
+  const AdminCompanyPage = () => {
+    const [companyForm, setCompanyForm] = useState<Record<string, string>>({})
+    useEffect(() => { if (adminCompany) setCompanyForm({ name: adminCompany.name || '', cnpj: adminCompany.cnpj || '', email: adminCompany.email || '', phone: adminCompany.phone || '', website: adminCompany.website || '', address: adminCompany.address || '', primary_color: adminCompany.primary_color || '#BE185D', logo_url: adminCompany.logo_url || '' }) }, [adminCompany])
+    const saveCompany = async () => { try { const res = await apiFetch('/api/admin/company', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(companyForm) }); const resp = await res.json(); showToast(resp.message || 'Salvo!'); fetchAdminCompany() } catch (e: any) { showToast(e.message) } }
+    return (
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><Settings className="w-6 h-6 text-pink-600" />Configuracoes da Empresa</h2>
+      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm max-w-2xl space-y-4">
+        <div className="mb-4"><label className="block text-xs font-medium text-gray-600 mb-1">Logo da Empresa</label><ImageUploadZone onUpload={url => setCompanyForm(p => ({ ...p, logo_url: url }))} preview={companyForm.logo_url} /></div>
+        {[{ l: 'Nome da Empresa', k: 'name' }, { l: 'CNPJ', k: 'cnpj' }, { l: 'Email', k: 'email', t: 'email' }, { l: 'Telefone', k: 'phone', t: 'tel' }, { l: 'Website', k: 'website', t: 'url' }, { l: 'Endereco', k: 'address' }].map(f => (
+          <div key={f.k}><label className="block text-xs font-medium text-gray-600 mb-1">{f.l}</label><input type={f.t || 'text'} value={companyForm[f.k] || ''} onChange={e => setCompanyForm(p => ({ ...p, [f.k]: e.target.value }))} className="w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-pink-400" /></div>
+        ))}
+        <div><label className="block text-xs font-medium text-gray-600 mb-1">Cor Primaria</label><div className="flex items-center gap-2"><input type="color" value={companyForm.primary_color || '#BE185D'} onChange={e => setCompanyForm(p => ({ ...p, primary_color: e.target.value }))} className="w-10 h-10 rounded-lg border-0 cursor-pointer" /><span className="text-sm text-gray-500">{companyForm.primary_color}</span></div></div>
+        <button onClick={saveCompany} className="w-full py-3 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center justify-center gap-2"><Save className="w-4 h-4" />Salvar Configuracoes</button>
+      </div>
+    </div>
+  )}
+
+  // ========== ADMIN LOGS PAGE (with search/pagination) ==========
   const AdminLogsPage = () => (
-    <div className="animate-fade-in p-4">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setPage('admin_dash')} className="text-pink-600 text-sm flex items-center gap-1"><ChevronRight className="w-4 h-4 rotate-180" />Voltar</button>
-        <h2 className="text-lg font-bold text-gray-800">Seguranca e Logs</h2>
-        <button onClick={() => fetchAdminLogs()} className="p-2 bg-pink-50 rounded-xl"><RefreshCw className="w-4 h-4 text-pink-600" /></button>
-      </div>
-
-      {/* Permissions matrix */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
-        <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2"><Lock className="w-4 h-4 text-pink-600" />Permissoes por Perfil</h3>
-        <div className="space-y-2">
-          {[
-            { role: 'admin', perms: ['Acesso total', 'Gestao de usuarios', 'Configuracoes', 'Logs'] },
-            { role: 'vendedor_ruby', perms: ['Dashboard', 'Ver promotoras', 'Relatorios'] },
-            { role: 'gerente_loja', perms: ['Dashboard', 'Pedidos da loja', 'Promotoras da loja'] },
-            { role: 'promotora', perms: ['Catalogo', 'Fazer pedidos', 'Desafios', 'Resgatar premios'] },
-          ].map(item => (
-            <div key={item.role} className="border border-gray-100 rounded-xl p-3">
-              <p className="text-sm font-bold text-gray-800 capitalize mb-1">{item.role.replace('_', ' ')}</p>
-              <div className="flex flex-wrap gap-1">
-                {item.perms.map(p => <span key={p} className="text-[10px] bg-pink-50 text-pink-600 px-2 py-0.5 rounded-full">{p}</span>)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Activity logs */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-        <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-pink-600" />Logs de Atividade</h3>
-        <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {adminLogs.map((log: Record<string, string>, i: number) => (
-            <div key={i} className="border-b border-gray-50 pb-2 last:border-0">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-800">{log.action?.replace('_', ' ')}</p>
-                <span className="text-[10px] text-gray-400">{(log.timestamp || '').slice(0, 16).replace('T', ' ')}</span>
-              </div>
-              <p className="text-xs text-gray-500">{log.user_name} — {log.details}</p>
-            </div>
-          ))}
-          {adminLogs.length === 0 && <p className="text-center text-gray-400 py-4">Nenhuma atividade registrada</p>}
-        </div>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><Activity className="w-6 h-6 text-pink-600" />Logs de Atividade</h2>
+      <AdminSearchBar placeholder="Buscar em logs..." onSearch={q => fetchAdminLogs(1, q)} />
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="px-4 py-3 text-left">Data/Hora</th><th className="px-4 py-3 text-left">Usuario</th><th className="px-4 py-3 text-left">Acao</th><th className="px-4 py-3 text-left">Detalhes</th></tr></thead>
+        <tbody>{adminLogs.map((item: any, i: number) => (<tr key={i} className="border-t border-gray-50 hover:bg-gray-50/50">
+          <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{item.timestamp?.replace('T', ' ').slice(0, 19)}</td>
+          <td className="px-4 py-2.5 text-sm">{item.user_name}</td>
+          <td className="px-4 py-2.5"><span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{item.action}</span></td>
+          <td className="px-4 py-2.5 text-sm text-gray-600 max-w-xs truncate">{item.details}</td>
+        </tr>))}</tbody></table></div>
       </div>
     </div>
   )
 
-
-  // ========== ADMIN STOCK PAGE ==========
+  // ========== ADMIN STOCK PAGE (with search/pagination) ==========
   const AdminStockPage = () => (
-    <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Gestao de Estoque</h1>
-          <p className="text-sm text-gray-500 mt-1">Controle de quantidades e alertas de estoque baixo</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => fetchAdminStock()} className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><RefreshCw className="w-4 h-4" />Atualizar</button>
-          <button onClick={() => { setShowCreateForm(true); setFormData({ quantity: '0', low_stock_alert: '10', warehouse: 'SP Principal' }) }} className="px-4 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-2"><Plus className="w-4 h-4" />Novo Registro</button>
-        </div>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Database className="w-6 h-6 text-pink-600" />Gestao de Estoque</h2>
+        <button onClick={() => { setFormData({ quantity: '100', low_stock_alert: '10', warehouse: 'SP-Principal' }); setShowCreateForm(true) }} className="px-4 py-2 bg-pink-600 text-white rounded-xl text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" />Novo</button></div>
+      <AdminSearchBar placeholder="Buscar no estoque..." onSearch={q => fetchAdminStock(1, q)} />
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="px-4 py-3 text-left">Produto</th><th className="px-4 py-3 text-left">EAN</th><th className="px-4 py-3 text-center">Quantidade</th><th className="px-4 py-3 text-center">Alerta</th><th className="px-4 py-3 text-left">Deposito</th><th className="px-4 py-3 text-center">Status</th><th className="px-4 py-3 text-right">Acoes</th></tr></thead>
+        <tbody>{adminStock.map((s: any) => (
+          <tr key={s.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+            <td className="px-4 py-3 font-medium">{s.product_name}</td><td className="px-4 py-3 text-xs text-gray-500">{s.ean}</td>
+            <td className="px-4 py-3 text-center font-medium">{s.quantity}</td><td className="px-4 py-3 text-center text-gray-500">{s.low_stock_alert}</td>
+            <td className="px-4 py-3 text-sm">{s.warehouse}</td>
+            <td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-lg text-xs ${s.quantity <= s.low_stock_alert ? 'bg-red-50 text-red-700' : s.quantity <= s.low_stock_alert * 2 ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700'}`}>{s.quantity <= s.low_stock_alert ? 'Baixo' : s.quantity <= s.low_stock_alert * 2 ? 'Medio' : 'OK'}</span></td>
+            <td className="px-4 py-3 text-right"><button onClick={async () => { await adminApiCall('DELETE', `/api/admin/stock/${s.id}`); fetchAdminStock() }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
+          </tr>
+        ))}</tbody></table></div>
       </div>
-
-      {/* Low stock alert banner */}
-      {adminStock.filter(s => s.quantity <= (s.low_stock_alert || 10)).length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-bold text-red-700">Alerta de Estoque Baixo</p>
-            <p className="text-xs text-red-600 mt-1">{adminStock.filter(s => s.quantity <= (s.low_stock_alert || 10)).length} produto(s) com estoque abaixo do minimo</p>
-          </div>
-        </div>
-      )}
-
-      {/* Stock table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Produto</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">EAN</th>
-              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Quantidade</th>
-              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Alerta Min.</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Deposito</th>
-              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Status</th>
-              <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Acoes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {adminStock.map((s: Record<string, unknown>) => {
-              const isLow = Number(s.quantity) <= Number(s.low_stock_alert || 10)
-              return (
-                <tr key={String(s.id)} className={`border-b border-gray-100 hover:bg-gray-50 transition ${isLow ? 'bg-red-50/50' : ''}`}>
-                  <td className="py-3 px-4">
-                    <p className="text-sm font-semibold text-gray-800">{String(s.product_name)}</p>
-                    <p className="text-xs text-gray-400">ID: {String(s.product_id)}</p>
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-600 font-mono">{String(s.ean)}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{String(s.quantity)}</span>
-                  </td>
-                  <td className="py-3 px-4 text-center text-sm text-gray-500">{String(s.low_stock_alert)}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{String(s.warehouse)}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${isLow ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{isLow ? 'Baixo' : 'Normal'}</span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => { setEditingItem({ type: 'stock', ...s }); setFormData({ product_name: String(s.product_name), ean: String(s.ean), quantity: String(s.quantity), low_stock_alert: String(s.low_stock_alert), warehouse: String(s.warehouse) }) }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition" title="Editar"><Edit3 className="w-4 h-4 text-gray-600" /></button>
-                      <button onClick={async () => { if (confirm('Remover este registro de estoque?')) { await adminApiCall(`/api/admin/stock/${s.id}`, 'DELETE'); fetchAdminStock() } }} className="p-2 bg-red-50 rounded-lg hover:bg-red-100 transition" title="Remover"><Trash2 className="w-4 h-4 text-red-600" /></button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        {adminStock.length === 0 && <p className="text-center text-gray-400 py-12">Nenhum registro de estoque</p>}
-      </div>
-
-      {/* Create Stock Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Novo Registro de Estoque</h3>
-              <button onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome do produto', 'product_name')}
-            {adminFormField('Codigo EAN', 'ean')}
-            {adminFormField('Quantidade', 'quantity', 'number', '0')}
-            {adminFormField('Alerta de estoque minimo', 'low_stock_alert', 'number', '10')}
-            {adminFormField('Deposito', 'warehouse', 'text', 'SP Principal')}
-            <button onClick={async () => {
-              const d = await adminApiCall('/api/admin/stock', 'POST', { product_name: formData.product_name, ean: formData.ean, quantity: parseInt(formData.quantity) || 0, low_stock_alert: parseInt(formData.low_stock_alert) || 10, warehouse: formData.warehouse || 'SP Principal' })
-              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminStock() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Criar Registro</button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Stock Modal */}
-      {editingItem?.type === 'stock' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Editar Estoque</h3>
-              <button onClick={() => setEditingItem(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome do produto', 'product_name')}
-            {adminFormField('Quantidade', 'quantity', 'number')}
-            {adminFormField('Alerta de estoque minimo', 'low_stock_alert', 'number')}
-            {adminFormField('Deposito', 'warehouse')}
-            <button onClick={async () => {
-              const d = await adminApiCall(`/api/admin/stock/${editingItem.id}`, 'PUT', { product_name: formData.product_name, quantity: parseInt(formData.quantity) || 0, low_stock_alert: parseInt(formData.low_stock_alert) || 10, warehouse: formData.warehouse })
-              if (d) { setEditingItem(null); setFormData({}); fetchAdminStock() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Salvar Alteracoes</button>
-          </div>
-        </div>
-      )}
+      {showCreateForm && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-screen overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Novo Registro de Estoque</h3>
+        {adminFormField('Nome do Produto', 'product_name')}{adminFormField('EAN', 'ean')}{adminFormField('Quantidade', 'quantity', 'number')}{adminFormField('Alerta Estoque Baixo', 'low_stock_alert', 'number')}{adminFormField('Deposito', 'warehouse')}
+        <div className="flex gap-2 mt-4"><button onClick={() => setShowCreateForm(false)} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { await adminApiCall('POST', '/api/admin/stock', { ...formData, quantity: parseInt(formData.quantity || '0'), low_stock_alert: parseInt(formData.low_stock_alert || '10') }); fetchAdminStock() }} className="flex-1 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium">Criar</button></div>
+      </div></div>}
     </div>
   )
 
-  // ========== ADMIN IMAGES PAGE ==========
+  // ========== ADMIN IMAGES PAGE (with search, upload) ==========
   const AdminImagesPage = () => (
-    <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Gestao de Imagens</h1>
-          <p className="text-sm text-gray-500 mt-1">Upload, preview e associacao de imagens a produtos</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => fetchAdminImages()} className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><RefreshCw className="w-4 h-4" />Atualizar</button>
-          <button onClick={() => { setShowCreateForm(true); setFormData({ type: 'produto' }) }} className="px-4 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-2"><Upload className="w-4 h-4" />Nova Imagem</button>
-        </div>
-      </div>
-
-      {/* Image stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center"><Image className="w-5 h-5 text-pink-600" /></div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{adminImages.length}</p>
-              <p className="text-xs text-gray-500">Total de imagens</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center"><ShoppingBag className="w-5 h-5 text-blue-600" /></div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{adminImages.filter((i: Record<string, unknown>) => i.type === 'produto').length}</p>
-              <p className="text-xs text-gray-500">Imagens de produtos</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center"><FileText className="w-5 h-5 text-purple-600" /></div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{adminImages.filter((i: Record<string, unknown>) => i.type === 'banner').length}</p>
-              <p className="text-xs text-gray-500">Imagens de banners</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Image gallery grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {adminImages.map((img: Record<string, unknown>) => (
-          <div key={String(img.id)} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden group">
-            <div className="aspect-square bg-gray-100 relative overflow-hidden">
-              <img src={String(img.url)} alt={String(img.name)} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300/f3f4f6/9ca3af?text=Sem+Imagem' }} />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
-                <div className="flex gap-2">
-                  <button onClick={() => window.open(String(img.url), '_blank')} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50"><Eye className="w-4 h-4 text-gray-700" /></button>
-                  <button onClick={() => { setEditingItem({ type: 'image', ...img }); setFormData({ name: String(img.name), url: String(img.url), product_name: String(img.product_name || ''), img_type: String(img.type || 'produto') }) }} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50"><Edit3 className="w-4 h-4 text-gray-700" /></button>
-                  <button onClick={async () => { if (confirm('Remover esta imagem?')) { await adminApiCall(`/api/admin/images/${img.id}`, 'DELETE'); fetchAdminImages() } }} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50"><Trash2 className="w-4 h-4 text-red-600" /></button>
-                </div>
-              </div>
-            </div>
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Image className="w-6 h-6 text-pink-600" />Galeria de Imagens</h2>
+        <button onClick={() => { setFormData({ type: 'produto' }); setUploadPreview(null); setShowCreateForm(true) }} className="px-4 py-2 bg-pink-600 text-white rounded-xl text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" />Nova</button></div>
+      <AdminSearchBar placeholder="Buscar imagens..." onSearch={q => fetchAdminImages(1, q)} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {adminImages.map((img: any) => (
+          <div key={img.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm group">
+            <div className="aspect-square bg-gray-100 flex items-center justify-center">{img.url ? <img src={img.url.startsWith('/') ? `${API}${img.url}` : img.url} alt={img.name} className="w-full h-full object-cover" /> : <Image className="w-8 h-8 text-gray-300" />}</div>
             <div className="p-3">
-              <p className="text-sm font-semibold text-gray-800 truncate">{String(img.name)}</p>
-              <div className="flex items-center justify-between mt-1">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${img.type === 'banner' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{String(img.type)}</span>
-                {Boolean(img.product_name) && <span className="text-xs text-gray-400 truncate ml-2">{String(img.product_name)}</span>}
+              <p className="text-sm font-medium text-gray-800 truncate">{img.name}</p>
+              <p className="text-xs text-gray-500">{img.type} {img.product_name ? `- ${img.product_name}` : ''}</p>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-400">{img.size ? `${(img.size / 1024).toFixed(0)}KB` : '-'}</span>
+                <button onClick={async () => { await adminApiCall('DELETE', `/api/admin/images/${img.id}`); fetchAdminImages() }} className="p-1 text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           </div>
         ))}
       </div>
-      {adminImages.length === 0 && <div className="text-center py-16 text-gray-400"><Image className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>Nenhuma imagem cadastrada</p></div>}
-
-      {/* Create Image Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Nova Imagem</h3>
-              <button onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome da imagem', 'name', 'text', 'Ex: Base HD - Frente')}
-            {adminFormField('URL da imagem', 'url', 'url', 'https://...')}
-            {formData.url && (
-              <div className="mb-3 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
-                <img src={formData.url} alt="Preview" className="w-full h-40 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                <p className="text-xs text-center text-gray-400 py-1">Preview da imagem</p>
-              </div>
-            )}
-            {adminSelectField('Tipo', 'type', [{ value: 'produto', label: 'Produto' }, { value: 'banner', label: 'Banner' }, { value: 'categoria', label: 'Categoria' }])}
-            {adminFormField('Nome do produto (opcional)', 'product_name', 'text', 'Associar a um produto')}
-            <button onClick={async () => {
-              const d = await adminApiCall('/api/admin/images', 'POST', { name: formData.name, url: formData.url, type: formData.type || 'produto', product_name: formData.product_name || null })
-              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminImages() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Upload className="w-4 h-4" />Adicionar Imagem</button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Image Modal */}
-      {editingItem?.type === 'image' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Editar Imagem</h3>
-              <button onClick={() => setEditingItem(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome da imagem', 'name')}
-            {adminFormField('URL da imagem', 'url', 'url')}
-            {formData.url && (
-              <div className="mb-3 rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
-                <img src={formData.url} alt="Preview" className="w-full h-40 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-              </div>
-            )}
-            {adminSelectField('Tipo', 'img_type', [{ value: 'produto', label: 'Produto' }, { value: 'banner', label: 'Banner' }, { value: 'categoria', label: 'Categoria' }])}
-            {adminFormField('Nome do produto', 'product_name')}
-            <button onClick={async () => {
-              const d = await adminApiCall(`/api/admin/images/${editingItem.id}`, 'PUT', { name: formData.name, url: formData.url, type: formData.img_type || 'produto', product_name: formData.product_name || null })
-              if (d) { setEditingItem(null); setFormData({}); fetchAdminImages() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Salvar Alteracoes</button>
-          </div>
-        </div>
-      )}
+      {showCreateForm && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-screen overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Nova Imagem</h3>
+        <div className="mb-4"><ImageUploadZone onUpload={url => setFormData(p => ({ ...p, url }))} /></div>
+        {adminFormField('Nome', 'name')}{adminFormField('Produto Associado', 'product_name')}
+        {adminSelectField('Tipo', 'type', [{ value: 'produto', label: 'Produto' }, { value: 'banner', label: 'Banner' }, { value: 'marketing', label: 'Marketing' }, { value: 'vitrine', label: 'Vitrine' }])}
+        <div className="flex gap-2 mt-4"><button onClick={() => { setShowCreateForm(false); setUploadPreview(null) }} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { await adminApiCall('POST', '/api/admin/images', formData); fetchAdminImages(); setUploadPreview(null) }} className="flex-1 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium">Salvar</button></div>
+      </div></div>}
     </div>
   )
 
   // ========== ADMIN INTEGRATIONS PAGE ==========
   const AdminIntegrationsPage = () => (
-    <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Integracoes e APIs</h1>
-          <p className="text-sm text-gray-500 mt-1">Gerencie conexoes com ERPs, logistica e servicos externos</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => fetchAdminIntegrations()} className="px-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><RefreshCw className="w-4 h-4" />Atualizar</button>
-          <button onClick={() => { setShowCreateForm(true); setFormData({ type: 'erp', active: 'true' }) }} className="px-4 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium hover:bg-pink-700 transition flex items-center gap-2"><Plus className="w-4 h-4" />Nova Integracao</button>
-        </div>
-      </div>
-
-      {/* Integration stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center"><Link2 className="w-5 h-5 text-blue-600" /></div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{adminIntegrations.length}</p>
-              <p className="text-xs text-gray-500">Total integracoes</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center"><Wifi className="w-5 h-5 text-emerald-600" /></div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{adminIntegrations.filter((i: Record<string, unknown>) => i.active).length}</p>
-              <p className="text-xs text-gray-500">Ativas</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center"><WifiOff className="w-5 h-5 text-red-600" /></div>
-            <div>
-              <p className="text-2xl font-bold text-gray-800">{adminIntegrations.filter((i: Record<string, unknown>) => !i.active).length}</p>
-              <p className="text-xs text-gray-500">Inativas</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Integration cards */}
-      <div className="space-y-4">
-        {adminIntegrations.map((ig: Record<string, unknown>) => (
-          <div key={String(ig.id)} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+    <div className="p-4 lg:p-6 animate-fade-in">
+      <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Link2 className="w-6 h-6 text-pink-600" />Integracoes & APIs</h2>
+        <button onClick={() => { setFormData({ type: 'erp', active: 'true' }); setShowCreateForm(true) }} className="px-4 py-2 bg-pink-600 text-white rounded-xl text-sm font-medium flex items-center gap-1"><Plus className="w-4 h-4" />Nova</button></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {adminIntegrations.map((ig: any) => (
+          <div key={ig.id} className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${ig.active ? 'bg-emerald-100' : 'bg-gray-100'}`}>
-                  {ig.active ? <Wifi className="w-6 h-6 text-emerald-600" /> : <WifiOff className="w-6 h-6 text-gray-400" />}
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-800">{String(ig.name)}</h3>
-                  <p className="text-xs text-gray-500">{String(ig.description)}</p>
-                </div>
-              </div>
-              <span className={`text-xs px-3 py-1 rounded-full font-medium ${ig.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{ig.active ? 'Conectado' : 'Desconectado'}</span>
+              <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${ig.active ? 'bg-green-50' : 'bg-gray-100'}`}>{ig.active ? <Wifi className="w-5 h-5 text-green-600" /> : <WifiOff className="w-5 h-5 text-gray-400" />}</div>
+                <div><h3 className="font-medium text-gray-800">{ig.name}</h3><p className="text-xs text-gray-500">{ig.type}</p></div></div>
+              <span className={`px-2 py-1 rounded-lg text-xs ${ig.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{ig.active ? 'Conectado' : 'Desconectado'}</span>
             </div>
-
-            <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-xl p-3 mb-3">
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">Tipo</p>
-                <p className="text-sm font-medium text-gray-700 capitalize">{String(ig.type)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">API URL</p>
-                <p className="text-sm font-medium text-gray-700 truncate">{String(ig.api_url || '—')}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">API Key</p>
-                <p className="text-sm font-medium text-gray-700 font-mono">{String(ig.api_key_masked || '—')}</p>
-              </div>
-            </div>
-
-                        {Boolean(ig.last_sync) && (
-                          <p className="text-xs text-gray-400 mb-3">Ultima sincronizacao: {String(ig.last_sync).slice(0, 16).replace('T', ' ')}</p>
-                        )}
-
-            <div className="flex items-center gap-2">
-              <button onClick={async () => { await adminApiCall(`/api/admin/integrations/${ig.id}/toggle`, 'PATCH'); fetchAdminIntegrations() }} className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition ${ig.active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
-                <Power className="w-4 h-4" />{ig.active ? 'Desativar' : 'Ativar'}
-              </button>
-              <button onClick={() => { setEditingItem({ type: 'integration', ...ig }); setFormData({ name: String(ig.name), int_type: String(ig.type), api_url: String(ig.api_url || ''), api_key: '', description: String(ig.description || '') }) }} className="px-4 py-2 bg-gray-100 rounded-xl text-sm text-gray-600 hover:bg-gray-200 transition flex items-center gap-2"><Edit3 className="w-4 h-4" />Editar</button>
-              <button onClick={async () => { if (confirm('Remover esta integracao?')) { await adminApiCall(`/api/admin/integrations/${ig.id}`, 'DELETE'); fetchAdminIntegrations() } }} className="px-4 py-2 bg-red-50 rounded-xl text-sm text-red-600 hover:bg-red-100 transition flex items-center gap-2"><Trash2 className="w-4 h-4" />Remover</button>
-            </div>
+            {ig.description && <p className="text-sm text-gray-600 mb-2">{ig.description}</p>}
+            {ig.api_url && <p className="text-xs text-gray-400 mb-1">URL: {ig.api_url}</p>}
+            {ig.api_key_masked && <p className="text-xs text-gray-400 mb-2">API Key: {ig.api_key_masked}</p>}
+            {ig.last_sync && <p className="text-xs text-gray-400 mb-3">Ultima sync: {ig.last_sync?.replace('T', ' ').slice(0, 19)}</p>}
+            <div className="flex gap-2"><button onClick={async () => { await adminApiCall('PATCH', `/api/admin/integrations/${ig.id}/toggle`); fetchAdminIntegrations() }} className={`flex-1 py-2 rounded-xl text-xs font-medium transition ${ig.active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>{ig.active ? 'Desconectar' : 'Conectar'}</button>
+              <button onClick={async () => { await adminApiCall('DELETE', `/api/admin/integrations/${ig.id}`); fetchAdminIntegrations() }} className="py-2 px-3 bg-gray-50 text-gray-600 rounded-xl text-xs hover:bg-gray-100"><Trash2 className="w-3.5 h-3.5" /></button></div>
           </div>
         ))}
       </div>
-      {adminIntegrations.length === 0 && <div className="text-center py-16 text-gray-400"><Link2 className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>Nenhuma integracao configurada</p></div>}
-
-      {/* Create Integration Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateForm(false)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Nova Integracao</h3>
-              <button onClick={() => setShowCreateForm(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome da integracao', 'name', 'text', 'Ex: ERP Totvs')}
-            {adminSelectField('Tipo', 'type', [{ value: 'erp', label: 'ERP' }, { value: 'logistica', label: 'Logistica' }, { value: 'pagamento', label: 'Pagamento' }, { value: 'notificacao', label: 'Notificacao' }, { value: 'outro', label: 'Outro' }])}
-            {adminFormField('URL da API', 'api_url', 'url', 'https://api.exemplo.com/v1')}
-            {adminFormField('Chave da API (API Key)', 'api_key', 'password', 'sk-...')}
-            {adminFormField('Descricao', 'description', 'text', 'Descreva a integracao')}
-            <button onClick={async () => {
-              const d = await adminApiCall('/api/admin/integrations', 'POST', { name: formData.name, type: formData.type || 'erp', api_url: formData.api_url, api_key: formData.api_key, description: formData.description, active: true })
-              if (d) { setShowCreateForm(false); setFormData({}); fetchAdminIntegrations() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Link2 className="w-4 h-4" />Criar Integracao</button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Integration Modal */}
-      {editingItem?.type === 'integration' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setEditingItem(null)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-800">Editar Integracao</h3>
-              <button onClick={() => setEditingItem(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            {adminFormField('Nome da integracao', 'name')}
-            {adminSelectField('Tipo', 'int_type', [{ value: 'erp', label: 'ERP' }, { value: 'logistica', label: 'Logistica' }, { value: 'pagamento', label: 'Pagamento' }, { value: 'notificacao', label: 'Notificacao' }, { value: 'outro', label: 'Outro' }])}
-            {adminFormField('URL da API', 'api_url', 'url')}
-            {adminFormField('Nova chave da API (deixe vazio para manter)', 'api_key', 'password')}
-            {adminFormField('Descricao', 'description')}
-            <button onClick={async () => {
-              const d = await adminApiCall(`/api/admin/integrations/${editingItem.id}`, 'PUT', { name: formData.name, type: formData.int_type || 'erp', api_url: formData.api_url, api_key: formData.api_key || '', description: formData.description, active: editingItem.active })
-              if (d) { setEditingItem(null); setFormData({}); fetchAdminIntegrations() }
-            }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm mt-3 flex items-center justify-center gap-2 hover:bg-pink-700 transition"><Save className="w-4 h-4" />Salvar Alteracoes</button>
-          </div>
-        </div>
-      )}
+      {showCreateForm && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-screen overflow-y-auto">
+        <h3 className="text-lg font-bold mb-4">Nova Integracao</h3>
+        {adminFormField('Nome', 'name')}{adminFormField('URL da API', 'api_url', 'url')}{adminFormField('API Key', 'api_key')}{adminFormField('Descricao', 'description')}
+        {adminSelectField('Tipo', 'type', [{ value: 'erp', label: 'ERP' }, { value: 'logistica', label: 'Logistica' }, { value: 'pagamento', label: 'Pagamento' }, { value: 'marketing', label: 'Marketing' }, { value: 'analytics', label: 'Analytics' }])}
+        <div className="flex gap-2 mt-4"><button onClick={() => setShowCreateForm(false)} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm">Cancelar</button>
+          <button onClick={async () => { await adminApiCall('POST', '/api/admin/integrations', { ...formData, active: true }); fetchAdminIntegrations() }} className="flex-1 py-2.5 bg-pink-600 text-white rounded-xl text-sm font-medium">Criar</button></div>
+      </div></div>}
     </div>
   )
 
 
-  // ========== MAIN LAYOUT ==========
-  const isAdminPage = page.startsWith('admin_')
-
+  // ========== PAGE MAPPING & NAVIGATION ==========
   const pages: Record<Page, () => JSX.Element> = {
     inicio: HomePage,
     catalogo: CatalogoPage,
@@ -1825,141 +1169,110 @@ function App() {
     admin_integrations: AdminIntegrationsPage,
   }
 
-  const adminSidebarItems: { id: Page; icon: typeof BarChart3; label: string }[] = [
-    { id: 'admin_dash', icon: BarChart3, label: 'Dashboard' },
-    { id: 'admin_products', icon: ShoppingBag, label: 'Produtos' },
-    { id: 'admin_stock', icon: Database, label: 'Estoque' },
-    { id: 'admin_banners', icon: FileText, label: 'Banners' },
-    { id: 'admin_images', icon: Image, label: 'Imagens' },
-    { id: 'admin_orders', icon: Package, label: 'Pedidos' },
-    { id: 'admin_users', icon: Users, label: 'Usuarios' },
-    { id: 'admin_integrations', icon: Link2, label: 'Integracoes' },
-    { id: 'admin_company', icon: Settings, label: 'Empresa' },
-    { id: 'admin_logs', icon: Shield, label: 'Seguranca' },
+  const adminSidebarItems: { page: Page, icon: any, label: string }[] = [
+    { page: 'admin_dash', icon: BarChart3, label: 'Dashboard' },
+    { page: 'admin_users', icon: Users, label: 'Usuarios' },
+    { page: 'admin_products', icon: Package, label: 'Produtos' },
+    { page: 'admin_stock', icon: Database, label: 'Estoque' },
+    { page: 'admin_orders', icon: ShoppingCart, label: 'Pedidos' },
+    { page: 'admin_banners', icon: BookOpen, label: 'Banners' },
+    { page: 'admin_images', icon: Image, label: 'Imagens' },
+    { page: 'admin_integrations', icon: Link2, label: 'Integracoes' },
+    { page: 'admin_company', icon: Settings, label: 'Empresa' },
+    { page: 'admin_logs', icon: Activity, label: 'Logs' },
   ]
 
-  const mobileNavItems: { id: Page; icon: typeof Home; label: string }[] = [
-    { id: 'inicio', icon: Home, label: 'Inicio' },
-    { id: 'catalogo', icon: ShoppingCart, label: 'Catalogo' },
-    { id: 'pedidos', icon: Package, label: 'Pedidos' },
-    { id: 'desafios', icon: Trophy, label: 'Desafios' },
-    ...(isAdmin ? [{ id: 'admin_dash' as Page, icon: Settings as typeof Home, label: 'Admin' }] : [{ id: 'perfil' as Page, icon: User as typeof Home, label: 'Perfil' }]),
+  const mobileNavItems: { page: Page, icon: any, label: string }[] = [
+    { page: 'inicio', icon: Home, label: 'Inicio' },
+    { page: 'catalogo', icon: ShoppingBag, label: 'Catalogo' },
+    { page: 'pedidos', icon: Package, label: 'Pedidos' },
+    { page: 'desafios', icon: Trophy, label: 'Desafios' },
+    { page: 'perfil', icon: User, label: 'Perfil' },
   ]
 
   const CurrentPage = pages[page] || HomePage
+  const isAdminPage = page.startsWith('admin_')
 
-  // ========== DESKTOP ADMIN LAYOUT (sidebar) ==========
-  if (isAdminPage && isAdmin) {
-    return (
-      <div className="admin-layout">
-        {/* Mobile top bar with hamburger */}
-        <div className="admin-topbar">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-pink-700 rounded-lg transition">
-            <Menu className="w-5 h-5 text-white" />
-          </button>
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-white" />
-            <span className="text-white font-bold text-base">Ruby Rose Admin</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-white/70 text-xs hidden sm:block">{user?.name}</span>
-            <button onClick={() => setPage('inicio')} className="p-2 hover:bg-pink-700 rounded-lg transition" title="Voltar ao App">
-              <Home className="w-5 h-5 text-white" />
-            </button>
-          </div>
-        </div>
-
-        {/* Sidebar overlay on mobile */}
-        {sidebarOpen && <div className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-
-        {/* Sidebar navigation */}
-        <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
-          <div className="p-5 border-b border-pink-700/30">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-white font-bold text-sm">Ruby Rose</h2>
-                <p className="text-pink-200 text-xs">Painel Administrativo</p>
-              </div>
-            </div>
-          </div>
-
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            {adminSidebarItems.map(item => {
-              const active = page === item.id
-              return (
-                <button key={item.id} onClick={() => { setPage(item.id); if (window.innerWidth < 1024) setSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition ${active ? 'bg-white/20 text-white font-semibold' : 'text-pink-200 hover:bg-white/10 hover:text-white'}`}>
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  <span>{item.label}</span>
-                </button>
-              )
-            })}
-          </nav>
-
-          <div className="p-3 border-t border-pink-700/30">
-            <button onClick={() => setPage('inicio')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-pink-200 hover:bg-white/10 hover:text-white transition">
-              <ExternalLink className="w-5 h-5" />
-              <span>Voltar ao App</span>
-            </button>
-            <button onClick={doLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-pink-200 hover:bg-white/10 hover:text-white transition">
-              <LogOut className="w-5 h-5" />
-              <span>Sair</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* Main content */}
-        <main className={`admin-main ${sidebarOpen ? 'shifted' : ''}`}>
-          <div className="admin-content">
-            <CurrentPage />
-          </div>
-        </main>
-
-        {/* Modals & Toast */}
-        <Toast />
-      </div>
-    )
-  }
-
-  // ========== MOBILE APP LAYOUT (unchanged for promotora) ==========
+  // ========== MAIN LAYOUT ==========
   return (
     <div className="app-container">
-      <div className="main-scroll">
+      {/* ADMIN SIDEBAR (desktop) */}
+      {isAdminPage && (
+        <div className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 shadow-sm transition-all duration-300 ${sidebarOpen ? 'w-60' : 'w-16'} hidden lg:flex flex-col`}>
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            {sidebarOpen && <div className="flex items-center gap-2"><Sparkles className="w-6 h-6 text-pink-600" /><span className="font-bold text-gray-800">Admin</span></div>}
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5 text-gray-500" /></button>
+          </div>
+          <nav className="flex-1 py-2 overflow-y-auto">
+            {adminSidebarItems.map(item => (
+              <button key={item.page} onClick={() => setPage(item.page)} className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition hover:bg-pink-50 ${page === item.page ? 'bg-pink-50 text-pink-700 font-medium border-r-2 border-pink-600' : 'text-gray-600'}`}>
+                <item.icon className="w-5 h-5 flex-shrink-0" />{sidebarOpen && <span>{item.label}</span>}
+              </button>
+            ))}
+          </nav>
+          <div className="p-4 border-t border-gray-100">
+            <button onClick={() => setPage('inicio')} className="w-full flex items-center gap-2 py-2 px-3 text-sm text-gray-600 hover:bg-gray-50 rounded-xl"><Home className="w-4 h-4" />{sidebarOpen && <span>Voltar ao App</span>}</button>
+            <button onClick={doLogout} className="w-full flex items-center gap-2 py-2 px-3 text-sm text-red-500 hover:bg-red-50 rounded-xl mt-1"><LogOut className="w-4 h-4" />{sidebarOpen && <span>Sair</span>}</button>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN CONTENT */}
+      <div className={`main-scroll ${isAdminPage ? (sidebarOpen ? 'lg:ml-60' : 'lg:ml-16') : ''}`}>
+        {/* Admin mobile header */}
+        {isAdminPage && (
+          <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-pink-600" /><span className="font-bold text-gray-800 text-sm">Admin Panel</span></div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage('inicio')} className="p-2 hover:bg-gray-100 rounded-lg"><Home className="w-4 h-4" /></button>
+              <button onClick={doLogout} className="p-2 hover:bg-red-50 rounded-lg text-red-500"><LogOut className="w-4 h-4" /></button>
+            </div>
+          </div>
+        )}
+        {/* Admin mobile nav tabs */}
+        {isAdminPage && (
+          <div className="lg:hidden overflow-x-auto border-b border-gray-100 bg-white">
+            <div className="flex min-w-max">{adminSidebarItems.map(item => (
+              <button key={item.page} onClick={() => setPage(item.page)} className={`flex flex-col items-center gap-1 px-4 py-2.5 text-xs whitespace-nowrap transition ${page === item.page ? 'text-pink-700 border-b-2 border-pink-600 font-medium' : 'text-gray-500'}`}>
+                <item.icon className="w-4 h-4" /><span>{item.label}</span>
+              </button>
+            ))}</div>
+          </div>
+        )}
+
         <CurrentPage />
       </div>
 
-      {/* Cart floating button */}
-      {cart.length > 0 && !showCart && (
-        <button onClick={() => setShowCart(true)} className="fixed bottom-24 right-4 z-30 bg-pink-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg">
-          <ShoppingCart className="w-6 h-6" />
-          <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>
+      {/* PROMOTORA BOTTOM NAV (non-admin) */}
+      {!isAdminPage && (
+        <div className="bottom-nav">
+          {mobileNavItems.map(item => (
+            <button key={item.page} onClick={() => setPage(item.page)} className={`nav-item ${page === item.page ? 'active' : ''}`}>
+              <item.icon className="w-5 h-5" /><span className="text-xs">{item.label}</span>
+            </button>
+          ))}
+          {user?.role === 'admin' && (
+            <button onClick={() => setPage('admin_dash')} className="nav-item"><Settings className="w-5 h-5" /><span className="text-xs">Admin</span></button>
+          )}
+        </div>
+      )}
+
+      {/* FLOATING CART */}
+      {!isAdminPage && cartCount > 0 && !showCart && (
+        <button onClick={() => setShowCart(true)} className="fixed bottom-20 right-4 z-30 bg-pink-600 text-white rounded-full p-3.5 shadow-lg flex items-center gap-2">
+          <ShoppingCart className="w-5 h-5" /><span className="text-sm font-medium">{cartCount}</span>
         </button>
       )}
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-gray-100 px-2 py-1.5 flex items-center justify-around z-20">
-        {mobileNavItems.map(item => {
-          const active = page === item.id
-          return (
-            <button key={item.id} onClick={() => setPage(item.id)} className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition ${active ? 'text-pink-600' : 'text-gray-400'}`}>
-              <item.icon className={`w-5 h-5 ${active ? 'text-pink-600' : 'text-gray-400'}`} />
-              <span className={`text-[10px] ${active ? 'font-semibold text-pink-600' : 'text-gray-400'}`}>{item.label}</span>
-            </button>
-          )
-        })}
-      </nav>
-
-      {/* Modals */}
-      <CartModal />
-      <OrderDetailModal />
-      <OrderSuccessModal />
-      <RewardKitsModal />
-      <LGPDBanner />
-      <PrivacyModal />
-      <DeleteModal />
-      <Toast />
+      {/* MODALS */}
+      {showCart && <CartModal />}
+      {showOrderDetail && <OrderDetailModal />}
+      {orderSuccess && <OrderSuccessModal />}
+      {showRewardKits && <RewardKitsModal />}
+      {showLGPD && <LGPDBanner />}
+      {showPrivacy && <PrivacyModal />}
+      {showDeleteConfirm && <DeleteModal />}
+      {toast && <Toast />}
     </div>
   )
 }
