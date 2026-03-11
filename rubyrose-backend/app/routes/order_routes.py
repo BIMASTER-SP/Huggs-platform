@@ -34,7 +34,7 @@ def create_order(req: CreateOrderRequest, user: dict = Depends(require_role(["pr
         if not product:
             raise HTTPException(status_code=400, detail=f"Produto ID {item.product_id} nao encontrado")
         if item.quantity < product.get("min_order", 1):
-            raise HTTPException(status_code=400, detail=f"{product['name']}: quantidade minima e {product['min_order']} unidades")
+            raise HTTPException(status_code=400, detail=f"{product['name']}: quantidade minima e {product.get('min_order', 1)} unidades")
         item_total = round(item.quantity * product["price"], 2)
         total_value += item_total
         order_items.append({

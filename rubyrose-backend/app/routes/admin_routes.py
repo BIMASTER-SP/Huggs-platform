@@ -256,7 +256,9 @@ def admin_list_orders(
     for o in orders_db:
         s = o["status"]
         stats["by_status"][s] = stats["by_status"].get(s, 0) + 1
-    return paginated_response(items, total, page, per_page, "Pedidos carregados")
+    resp = paginated_response(items, total, page, per_page, "Pedidos carregados")
+    resp["stats"] = stats
+    return resp
 
 
 # ============================================================
