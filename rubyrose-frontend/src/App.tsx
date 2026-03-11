@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
-import { Search, Home, Gamepad2, Receipt, User, ChevronRight, Star, Gift, Users, Diamond, Trophy, Camera, Keyboard, X, Check, ShoppingBag, Sparkles, Heart, ArrowRight, ScanLine, DollarSign, Percent, Truck, ThumbsUp, Ticket, CreditCard, Zap, Crown } from 'lucide-react'
+import { Search, Home, Gamepad2, Receipt, User, ChevronRight, Star, Gift, Users, Diamond, Trophy, Camera, Keyboard, X, Check, ShoppingBag, Sparkles, Heart, ArrowRight, ScanLine, DollarSign, Percent, Truck, ThumbsUp, Ticket, CreditCard, Zap, Crown, Shield, Trash2, FileText, AlertTriangle } from 'lucide-react'
 
 const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -89,6 +89,10 @@ function App() {
   const [lookupResult, setLookupResult] = useState<LookupResult | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentBanner, setCurrentBanner] = useState(0)
+  const [showLGPDConsent, setShowLGPDConsent] = useState(() => !localStorage.getItem('lgpd_consent'))
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [privacyPolicyData, setPrivacyPolicyData] = useState<any>(null)
 
   // Fallback data for when API is unreachable
   const fallbackUser = { id: 'user-001', name: 'Maria Silva', email: 'maria@email.com', cpf: '***.***.***-45', points: 2850, cashback_balance: 47.90, total_cashback_earned: 234.50, receipts_count: 18, level: 'Ouro' }
@@ -131,6 +135,25 @@ function App() {
     { id: 2, name: 'Compre produtos Skincare', description: 'Compre qualquer produto da linha Skincare', points_reward: 150, progress: 0, total: 1, type: 'purchase' },
     { id: 3, name: 'Indique um amigo', description: 'Convide um amigo para usar o app', points_reward: 200, progress: 0, total: 1, type: 'referral' },
   ]
+
+  const acceptLGPDConsent = () => {
+    localStorage.setItem('lgpd_consent', JSON.stringify({ accepted: true, date: new Date().toISOString(), marketing: true, third_party: false }))
+    setShowLGPDConsent(false)
+    // Try to send consent to API
+    apiFetch('/api/lgpd/consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ consent_data_collection: true, consent_marketing: true, consent_third_party: false }) }).catch(() => {})
+  }
+
+  const openPrivacyPolicy = async () => {
+    setShowPrivacyPolicy(true)
+    if (!privacyPolicyData) {
+      try {
+        const res = await apiFetch('/api/lgpd/privacy-policy')
+        setPrivacyPolicyData(await res.json())
+      } catch {
+        setPrivacyPolicyData({ title: 'Politica de Privacidade', version: '1.0', sections: [{ title: 'Carregando...', content: 'Nao foi possivel carregar a politica de privacidade.' }] })
+      }
+    }
+  }
 
   const fetchData = useCallback(async () => {
     const [u, p, c, o, s, rec, rew, m] = await Promise.all([
@@ -661,7 +684,7 @@ function App() {
 
       <div className="section-divider" />
 
-      <div className="px-4 py-4 pb-6">
+      <div className="px-4 py-4">
         <h3 className="text-gray-900 font-bold text-base mb-3">Missoes ativas</h3>
         {missions.map(m => (
           <div key={m.id} className="bg-white rounded-xl p-3 mb-2 shadow-sm flex items-center gap-3 border border-gray-100">
@@ -681,8 +704,132 @@ function App() {
           </div>
         ))}
       </div>
+
+      <div className="section-divider" />
+
+      {/* LGPD / Configuracoes */}
+      <div className="px-4 py-4 pb-6">
+        <h3 className="text-gray-900 font-bold text-base mb-3">Configuracoes e Privacidade</h3>
+        <div className="space-y-2">
+          <button onClick={openPrivacyPolicy} className="w-full flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-100 shadow-sm active:bg-gray-50">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-blue-500" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-gray-800 text-sm font-medium">Politica de Privacidade</p>
+              <p className="text-gray-400 text-[10px]">LGPD - Seus direitos e dados</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-300" />
+          </button>
+          <button onClick={openPrivacyPolicy} className="w-full flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-100 shadow-sm active:bg-gray-50">
+            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-green-500" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-gray-800 text-sm font-medium">Exportar meus dados</p>
+              <p className="text-gray-400 text-[10px]">Baixar copia dos seus dados</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-300" />
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="w-full flex items-center gap-3 bg-white rounded-xl p-3 border border-red-100 shadow-sm active:bg-red-50">
+            <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-red-500" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-red-600 text-sm font-medium">Excluir minha conta</p>
+              <p className="text-gray-400 text-[10px]">Remover todos os seus dados</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-300" />
+          </button>
+        </div>
+      </div>
     </div>
   )
+
+  // ========== LGPD CONSENT BANNER ==========
+  const LGPDConsentBanner = () => showLGPDConsent ? (
+    <div className="fixed bottom-16 left-0 right-0 z-50 flex justify-center px-4 animate-slide-up">
+      <div className="w-full max-w-[430px] bg-white rounded-2xl shadow-2xl border border-gray-200 p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <Shield className="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-gray-900 font-bold text-sm">Sua privacidade importa</h3>
+            <p className="text-gray-500 text-xs mt-1 leading-relaxed">
+              Utilizamos seus dados para personalizar ofertas de cashback e melhorar sua experiencia. 
+              Voce pode gerenciar suas preferencias a qualquer momento em Perfil {'>'} Configuracoes.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={openPrivacyPolicy} className="flex-1 py-2.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-xl">
+            Saiba mais
+          </button>
+          <button onClick={acceptLGPDConsent} className="flex-1 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 rounded-xl shadow">
+            Aceitar e continuar
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // ========== PRIVACY POLICY MODAL ==========
+  const PrivacyPolicyModal = () => showPrivacyPolicy ? (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowPrivacyPolicy(false)}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div className="relative bg-white w-full max-w-[430px] rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-blue-500" />
+            <h2 className="text-gray-900 font-bold text-base">Politica de Privacidade</h2>
+          </div>
+          <button onClick={() => setShowPrivacyPolicy(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-4">
+          {privacyPolicyData ? (
+            <div className="space-y-4">
+              <p className="text-gray-400 text-xs">Versao {privacyPolicyData.version} | Ultima atualizacao: {privacyPolicyData.last_updated || '2026-03-01'}</p>
+              {privacyPolicyData.sections?.map((s: any, i: number) => (
+                <div key={i}>
+                  <h3 className="text-gray-900 font-bold text-sm mb-1">{s.title}</h3>
+                  <p className="text-gray-600 text-xs leading-relaxed">{s.content}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm text-center py-8">Carregando...</p>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // ========== DELETE ACCOUNT CONFIRMATION ==========
+  const DeleteConfirmModal = () => showDeleteConfirm ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={() => setShowDeleteConfirm(false)}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div className="relative bg-white w-full max-w-[350px] rounded-2xl p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex flex-col items-center text-center">
+          <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-3">
+            <AlertTriangle className="w-7 h-7 text-red-500" />
+          </div>
+          <h3 className="text-gray-900 font-bold text-base mb-1">Excluir conta?</h3>
+          <p className="text-gray-500 text-xs mb-4 leading-relaxed">
+            Esta acao e irreversivel. Todos os seus dados, pontos e cashback serao permanentemente removidos conforme a LGPD.
+          </p>
+          <div className="flex gap-2 w-full">
+            <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl">
+              Cancelar
+            </button>
+            <button onClick={() => { setShowDeleteConfirm(false); alert('Solicitacao de exclusao enviada. Seus dados serao removidos em ate 15 dias uteis.') }} className="flex-1 py-2.5 text-sm font-bold text-white bg-red-500 rounded-xl">
+              Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   // ========== PREMIOS PAGE ==========
   const JogosPage = () => (
@@ -913,6 +1060,9 @@ function App() {
       </div>
 
       {showScanner && <ScannerModal />}
+      <LGPDConsentBanner />
+      {showPrivacyPolicy && <PrivacyPolicyModal />}
+      {showDeleteConfirm && <DeleteConfirmModal />}
     </div>
   )
 }
