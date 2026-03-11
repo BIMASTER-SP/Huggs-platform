@@ -19,9 +19,20 @@ function parseApiUrl(raw: string): { url: string; headers: Record<string, string
 
 const { url: API, headers: AUTH_HEADERS } = parseApiUrl(RAW_API)
 
-const apiFetch = (path: string, opts?: RequestInit) => {
+const apiFetch = async (path: string, opts?: RequestInit) => {
   const merged = { ...opts, headers: { ...AUTH_HEADERS, ...(opts?.headers || {}) } }
-  return fetch(`${API}${path}`, merged)
+  const res = await fetch(`${API}${path}`, merged)
+  if (!res.ok) throw new Error(`API ${res.status}`)
+  return res
+}
+
+const safeJson = async (path: string, fallback: unknown) => {
+  try {
+    const res = await apiFetch(path)
+    return await res.json()
+  } catch {
+    return fallback
+  }
 }
 
 type Page = 'inicio' | 'jogos' | 'pix' | 'notas' | 'conta'
@@ -122,24 +133,18 @@ function App() {
   ]
 
   const fetchData = useCallback(async () => {
-    try {
-      const [u, p, c, o, s, rec, rew, m] = await Promise.all([
-        apiFetch('/api/user').then(r => r.json()),
-        apiFetch('/api/products').then(r => r.json()),
-        apiFetch('/api/categories').then(r => r.json()),
-        apiFetch('/api/offers').then(r => r.json()),
-        apiFetch('/api/services').then(r => r.json()),
-        apiFetch('/api/receipts').then(r => r.json()),
-        apiFetch('/api/rewards').then(r => r.json()),
-        apiFetch('/api/missions').then(r => r.json()),
-      ])
-      setUser(u); setProducts(p); setCategories(c); setOffers(o)
-      setServices(s); setReceipts(rec.receipts || []); setRewards(rew); setMissions(m)
-    } catch {
-      // Use fallback data when API is unreachable
-      setUser(fallbackUser); setProducts(fallbackProducts); setCategories(fallbackCategories)
-      setOffers(fallbackOffers); setServices(fallbackServices); setRewards(fallbackRewards); setMissions(fallbackMissions)
-    }
+    const [u, p, c, o, s, rec, rew, m] = await Promise.all([
+      safeJson('/api/user', fallbackUser),
+      safeJson('/api/products', fallbackProducts),
+      safeJson('/api/categories', fallbackCategories),
+      safeJson('/api/offers', fallbackOffers),
+      safeJson('/api/services', fallbackServices),
+      safeJson('/api/receipts', { receipts: [] }),
+      safeJson('/api/rewards', fallbackRewards),
+      safeJson('/api/missions', fallbackMissions),
+    ])
+    setUser(u); setProducts(p); setCategories(c); setOffers(o)
+    setServices(s); setReceipts(rec.receipts || []); setRewards(rew); setMissions(m)
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
