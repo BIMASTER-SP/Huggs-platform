@@ -79,6 +79,48 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [currentBanner, setCurrentBanner] = useState(0)
 
+  // Fallback data for when API is unreachable
+  const fallbackUser = { id: 'user-001', name: 'Maria Silva', email: 'maria@email.com', cpf: '***.***.***-45', points: 2850, cashback_balance: 47.90, total_cashback_earned: 234.50, receipts_count: 18, level: 'Ouro' }
+  const fallbackProducts = [
+    { id: 1, name: 'Base Liquida HD Ruby Rose', image: 'base', price: 39.90, cashback_percent: 15, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
+    { id: 2, name: 'Paleta de Sombras 18 Cores', image: 'paleta', price: 49.90, cashback_percent: 20, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 1 },
+    { id: 3, name: 'Batom Matte Longa Duracao', image: 'batom', price: 19.90, cashback_percent: 25, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 3 },
+    { id: 4, name: 'Mascara de Cilios Volume Max', image: 'mascara', price: 29.90, cashback_percent: 10, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
+    { id: 5, name: 'Po Compacto HD', image: 'po', price: 25.90, cashback_percent: 12, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
+    { id: 6, name: 'Primer Facial Hidratante', image: 'primer', price: 34.90, cashback_percent: 18, category: 'Skincare', brand: 'Ruby Rose', max_per_person: 1 },
+    { id: 7, name: 'Serum Vitamina C', image: 'serum', price: 44.90, cashback_percent: 30, category: 'Skincare', brand: 'Ruby Rose', max_per_person: 1 },
+    { id: 8, name: 'Agua Micelar 200ml', image: 'micelar', price: 22.90, cashback_percent: 15, category: 'Skincare', brand: 'Ruby Rose', max_per_person: 2 },
+    { id: 9, name: 'Kit Pinceis Maquiagem 12pcs', image: 'pinceis', price: 59.90, cashback_percent: 20, category: 'Acessorios', brand: 'Ruby Rose', max_per_person: 1 },
+    { id: 10, name: 'Esmalte Gel Ruby Rose', image: 'esmalte', price: 12.90, cashback_percent: 50, category: 'Unhas', brand: 'Ruby Rose', max_per_person: 5 },
+    { id: 11, name: 'Lip Gloss Volumizador', image: 'gloss', price: 24.90, cashback_percent: 22, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
+    { id: 12, name: 'Corretivo Liquido HD', image: 'corretivo', price: 18.90, cashback_percent: 15, category: 'Maquiagem', brand: 'Ruby Rose', max_per_person: 2 },
+  ]
+  const fallbackCategories = ['Todas', 'Super Cashback', 'Maquiagem', 'Skincare', 'Unhas', 'Acessorios']
+  const fallbackOffers = { banners: [
+    { id: 1, title: '100% cashback', subtitle: 'Na primeira compra Ruby Rose', description: 'Valido ate R$30,00', color: 'purple', highlight: true },
+    { id: 2, title: 'Skincare Week', subtitle: 'Ate 30% de cashback', description: 'Valido esta semana', color: 'pink', highlight: false },
+    { id: 3, title: 'Dia da Mulher', subtitle: 'Cashback em dobro', description: '08 de Marco', color: 'rose', highlight: false },
+  ]}
+  const fallbackServices = [
+    { id: 1, name: 'Jogue e Ganhe', icon: 'gamepad', badge: 'EM DOBRO', badge_color: 'green' },
+    { id: 2, name: 'Ruby Prime', icon: 'diamond', badge: null, badge_color: null },
+    { id: 3, name: 'Sorteios', icon: 'gift', badge: 'NOVIDADE', badge_color: 'pink' },
+    { id: 4, name: 'Indicar Amigos', icon: 'users', badge: null, badge_color: null },
+  ]
+  const fallbackRewards = [
+    { id: 1, name: 'Desconto 15% na proxima compra', points_required: 200, type: 'discount', icon: 'percent', available: true },
+    { id: 2, name: 'Frete Gratis', points_required: 300, type: 'shipping', icon: 'truck', available: true },
+    { id: 3, name: 'Kit Miniatura Exclusivo', points_required: 500, type: 'product', icon: 'gift', available: true },
+    { id: 4, name: 'Cashback R$10', points_required: 350, type: 'cashback', icon: 'dollar-sign', available: true },
+    { id: 5, name: 'Sorteio Viagem Spa', points_required: 100, type: 'raffle', icon: 'star', available: true },
+    { id: 6, name: 'Paleta Exclusiva Edicao Limitada', points_required: 1000, type: 'product', icon: 'palette', available: true },
+  ]
+  const fallbackMissions = [
+    { id: 1, name: 'Envie 3 notas fiscais', description: 'Envie 3 cupons fiscais esta semana', points_reward: 100, progress: 1, total: 3, type: 'receipt' },
+    { id: 2, name: 'Compre produtos Skincare', description: 'Compre qualquer produto da linha Skincare', points_reward: 150, progress: 0, total: 1, type: 'purchase' },
+    { id: 3, name: 'Indique um amigo', description: 'Convide um amigo para usar o app', points_reward: 200, progress: 0, total: 1, type: 'referral' },
+  ]
+
   const fetchData = useCallback(async () => {
     try {
       const [u, p, c, o, s, rec, rew, m] = await Promise.all([
@@ -93,7 +135,11 @@ function App() {
       ])
       setUser(u); setProducts(p); setCategories(c); setOffers(o)
       setServices(s); setReceipts(rec.receipts || []); setRewards(rew); setMissions(m)
-    } catch (e) { console.error('Fetch error:', e) }
+    } catch {
+      // Use fallback data when API is unreachable
+      setUser(fallbackUser); setProducts(fallbackProducts); setCategories(fallbackCategories)
+      setOffers(fallbackOffers); setServices(fallbackServices); setRewards(fallbackRewards); setMissions(fallbackMissions)
+    }
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
