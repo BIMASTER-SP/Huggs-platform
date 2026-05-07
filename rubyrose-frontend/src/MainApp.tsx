@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
-import { Search, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Plus, Minus, MapPin, CheckCircle, Truck, Send, Target, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, ExternalLink, Image, Database, Link2, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
+import { Search, ShoppingCart, Package, Trophy, ChevronRight, X, Check, Plus, MapPin, CheckCircle, Truck, Send, Trash2, AlertTriangle, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, Image, Database, Link2, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 
 import { API_URL, tokenStorage } from '@/lib/api'
@@ -10,6 +10,11 @@ import { useToast } from '@/contexts/ToastContext'
 import { AppModals, type ModalState } from '@/components/AppModals'
 import { BottomNav } from '@/components/BottomNav'
 import { AdminSidebar, AdminMobileChrome } from '@/components/AdminSidebar'
+import { HomePage } from '@/pages/HomePage'
+import { CatalogoPage } from '@/pages/CatalogoPage'
+import { PedidosPage } from '@/pages/PedidosPage'
+import { DesafiosPage } from '@/pages/DesafiosPage'
+import { PerfilPage } from '@/pages/PerfilPage'
 
 // Thin fetch helper that wraps `fetch` with the same JWT Bearer + 401 handling
 // as `lib/api.ts` but returns the raw Response so the existing call sites
@@ -41,7 +46,7 @@ function MainApp() {
   const { showToast } = useToast()
   // CartContext owns items/total/qty/clear/submit. cartItems/cartCount used by main UI;
   // CartModal pulls the rest from the context directly.
-  const { items: cartItems, count: cartCount, addToCart, updateQty: updateCartQty, clear: clearCart, submit: submitCart } = useCart()
+  const { items: cartItems, count: cartCount, clear: clearCart, submit: submitCart } = useCart()
 
   // ----- local state -----
   const [page, setPage] = useState<Page>('inicio')
@@ -198,391 +203,9 @@ function MainApp() {
   // Login screen lives at /login (see App.tsx). MainApp is only rendered behind <ProtectedRoute>,
   // so isLoggedIn is always true here; doLogout below redirects to /login.
 
-  // ========== HOME / DASHBOARD PAGE ==========
-  const HomePage = () => (
-    <div className="animate-fade-in">
-      <div style={{ background: 'linear-gradient(180deg, #BE185D 0%, #EC4899 60%, #FDF2F8 100%)' }} className="px-4 pt-4 pb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-white/80 text-xs">Ola,</p>
-            <h2 className="text-white font-bold text-lg">{user?.name || 'Vendedora'}</h2>
-            {dashboard?.store && <p className="text-white/70 text-xs flex items-center gap-1"><MapPin className="w-3 h-3" />{dashboard.store.name}</p>}
-          </div>
-          <div className="bg-white/20 rounded-2xl px-4 py-2 text-center">
-            <p className="text-yellow-300 text-xl font-bold">{user?.points || 0}</p>
-            <p className="text-white/80 text-[10px]">pontos</p>
-          </div>
-        </div>
-
-        {/* Stats cards */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-white text-lg font-bold">{dashboard?.total_orders || 0}</p>
-            <p className="text-white/70 text-[10px]">Pedidos</p>
-          </div>
-          <div className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-white text-lg font-bold">R${(dashboard?.total_order_value || 0).toFixed(0)}</p>
-            <p className="text-white/70 text-[10px]">Total Vendido</p>
-          </div>
-          <div className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
-            <p className="text-white text-lg font-bold">{user?.level || 'Bronze'}</p>
-            <p className="text-white/70 text-[10px]">Nivel</p>
-          </div>
-        </div>
-
-        {/* Banner carousel */}
-        {dashboard?.banners?.length > 0 && (
-          <div className="relative overflow-hidden rounded-2xl">
-            {dashboard.banners.map((b: any, i: number) => (
-              <div key={b.id} className={`transition-all duration-500 ${i === currentBanner ? 'block' : 'hidden'}`}>
-                <div className="relative h-32 rounded-2xl overflow-hidden" style={{
-                  background: b.color === 'rose' ? 'linear-gradient(135deg, #9F1239 0%, #F43F5E 100%)'
-                    : b.color === 'purple' ? 'linear-gradient(135deg, #7E22CE 0%, #A855F7 100%)'
-                    : b.color === 'emerald' ? 'linear-gradient(135deg, #065F46 0%, #10B981 100%)'
-                    : 'linear-gradient(135deg, #BE185D 0%, #EC4899 100%)'
-                }}>
-                  <div className="p-4 h-full flex flex-col justify-center">
-                    {b.highlight && <span className="bg-yellow-400 text-purple-900 text-[9px] font-bold px-2 py-0.5 rounded-full self-start mb-1">DESTAQUE</span>}
-                    <h3 className="text-white text-base font-bold">{b.title}</h3>
-                    <p className="text-white/80 text-xs mt-0.5">{b.subtitle}</p>
-                  </div>
-                  <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-                </div>
-              </div>
-            ))}
-            <div className="flex justify-center gap-1.5 mt-2">
-              {dashboard.banners.map((_: any, i: number) => (
-                <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentBanner ? 'bg-white w-4' : 'bg-white/40'}`} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Quick actions */}
-      <div className="px-4 -mt-2">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-4 gap-3">
-          {[
-            { icon: ShoppingCart, label: 'Novo Pedido', color: 'bg-pink-100 text-pink-600', action: () => setPage('catalogo') },
-            { icon: Trophy, label: 'Desafios', color: 'bg-purple-100 text-purple-600', action: () => setPage('desafios') },
-            { icon: Gift, label: 'Premios', color: 'bg-emerald-100 text-emerald-600', action: () => setShowRewardKits(true) },
-            { icon: Package, label: 'Pedidos', color: 'bg-blue-100 text-blue-600', action: () => setPage('pedidos') },
-          ].map((a, i) => (
-            <button key={i} onClick={a.action} className="flex flex-col items-center gap-1.5">
-              <div className={`w-12 h-12 rounded-2xl ${a.color} flex items-center justify-center`}>
-                <a.icon className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] text-gray-600 font-medium">{a.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Active challenges */}
-      {dashboard?.active_challenges?.length > 0 && (
-        <div className="px-4 mt-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-800 text-sm">Desafios Ativos</h3>
-            <button onClick={() => setPage('desafios')} className="text-pink-600 text-xs font-medium flex items-center gap-0.5">Ver todos <ChevronRight className="w-3 h-3" /></button>
-          </div>
-          <div className="space-y-2">
-            {dashboard.active_challenges.slice(0, 2).map((c: any) => (
-              <div key={c.id} className="bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.progress >= c.goal ? 'bg-green-100' : 'bg-purple-100'}`}>
-                  {c.progress >= c.goal ? <Check className="w-5 h-5 text-green-600" /> : <Target className="w-5 h-5 text-purple-600" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{c.title}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-pink-500 rounded-full transition-all" style={{ width: `${Math.min(100, (c.progress / c.goal) * 100)}%` }} />
-                    </div>
-                    <span className="text-[10px] text-gray-500">{c.progress}/{c.goal}</span>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-yellow-600">{c.points_reward}pts</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Recent orders */}
-      {dashboard?.recent_orders?.length > 0 && (
-        <div className="px-4 mt-5 pb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-800 text-sm">Ultimos Pedidos</h3>
-            <button onClick={() => setPage('pedidos')} className="text-pink-600 text-xs font-medium flex items-center gap-0.5">Ver todos <ChevronRight className="w-3 h-3" /></button>
-          </div>
-          <div className="space-y-2">
-            {dashboard.recent_orders.map((o: any) => {
-              const Icon = statusIcons[o.status] || Package
-              return (
-                <button key={o.id} onClick={() => setShowOrderDetail(o)} className="w-full bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 text-left">
-                  <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-gray-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{o.store_name}</p>
-                    <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleDateString('pt-BR')}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gray-800">R${o.total_value.toFixed(2)}</p>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[o.status] || 'bg-gray-100 text-gray-600'}`}>{statusLabels[o.status] || o.status}</span>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-
-
-  // ========== CATALOG PAGE ==========
-  const CatalogoPage = () => {
-    const filtered = searchQuery ? catalog.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())) : catalog
-    return (
-      <div className="animate-fade-in">
-        <div className="bg-pink-600 px-4 pt-4 pb-5">
-          <h2 className="text-white font-bold text-lg mb-3">Catalogo de Produtos</h2>
-          <div className="relative">
-            <input type="text" placeholder="Buscar produtos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              className="w-full py-3 pl-4 pr-10 bg-white/20 rounded-xl text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30" />
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
-          </div>
-        </div>
-
-        {/* iPaper Interactive Catalog Button */}
-        <div className="px-4 pt-3">
-          <a href="https://viewer.ipaper.io/ruby-rose-br/catalogo-interativo-ruby-rose/" target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-between w-full px-4 py-3 bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-xl hover:shadow-md transition">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-pink-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">Catalogo Interativo</p>
-                <p className="text-[10px] text-gray-500">Ruby Rose - 160 paginas</p>
-              </div>
-            </div>
-            <ExternalLink className="w-4 h-4 text-pink-600" />
-          </a>
-        </div>
-
-        {/* Categories */}
-        <div className="px-4 py-3 flex gap-2 overflow-x-auto hide-scrollbar">
-              {categories.map(c => (
-                <button key={c} onClick={() => { setSelectedCategory(c); fetchCatalog(c) }}
-                  className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${c === selectedCategory ? 'bg-pink-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{c}</button>
-              ))}
-            </div>
-
-            {/* Products grid */}
-            <div className="px-4 pb-4 grid grid-cols-2 gap-3">
-              {filtered.map(p => {
-                const inCart = cartItems.find(i => i.product_id === p.id)
-                return (
-                  <div key={p.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="h-28 bg-gradient-to-br from-pink-50 to-rose-50 flex items-center justify-center">
-                      <ShoppingBag className="w-10 h-10 text-pink-300" />
-                    </div>
-                    <div className="p-3">
-                      <p className="text-xs font-medium text-gray-800 line-clamp-2 h-8">{p.name}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{p.category}</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <div>
-                          <p className="text-sm font-bold text-pink-600">R${p.price.toFixed(2)}</p>
-                          <p className="text-[9px] text-gray-400">Min: {p.min_order} un</p>
-                        </div>
-                        {inCart ? (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => updateCartQty(p.id, -1)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
-                            <span className="text-xs font-bold w-5 text-center">{inCart.quantity}</span>
-                            <button onClick={() => updateCartQty(p.id, 1)} className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center"><Plus className="w-3 h-3 text-pink-600" /></button>
-                          </div>
-                        ) : (
-                          <button onClick={() => addToCart(p)} className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center">
-                            <Plus className="w-4 h-4 text-white" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-        </div>
-      </div>
-    )
-  }
-
-  // ========== ORDERS PAGE ==========
-  const PedidosPage = () => (
-    <div className="animate-fade-in">
-      <div className="bg-pink-600 px-4 pt-4 pb-5">
-        <h2 className="text-white font-bold text-lg">Meus Pedidos</h2>
-        <p className="text-white/70 text-xs mt-0.5">{orders.length} pedido(s) encontrado(s)</p>
-      </div>
-      <div className="px-4 py-3 space-y-3">
-        {orders.length === 0 ? (
-          <div className="text-center py-12">
-            <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Nenhum pedido ainda</p>
-            <button onClick={() => setPage('catalogo')} className="mt-3 px-4 py-2 bg-pink-600 text-white rounded-xl text-sm">Fazer primeiro pedido</button>
-          </div>
-        ) : orders.map(o => {
-          const Icon = statusIcons[o.status] || Package
-          return (
-            <button key={o.id} onClick={() => setShowOrderDetail(o)} className="w-full bg-white rounded-xl border border-gray-100 p-4 text-left">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Icon className="w-4 h-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">{o.id}</span>
-                </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[o.status] || 'bg-gray-100'}`}>{statusLabels[o.status] || o.status}</span>
-              </div>
-              <p className="text-sm font-medium text-gray-800">{o.store_name}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{new Date(o.created_at).toLocaleDateString('pt-BR')} - {o.items?.length || 0} item(ns)</p>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
-                <span className="text-xs text-gray-500">Total do pedido</span>
-                <span className="text-sm font-bold text-gray-800">R${o.total_value.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs text-gray-500">Pontos ganhos</span>
-                <span className="text-xs font-bold text-yellow-600">+{o.points_earned} pts</span>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-
-  // ========== CHALLENGES PAGE ==========
-  const DesafiosPage = () => (
-    <div className="animate-fade-in">
-      <div className="bg-purple-600 px-4 pt-4 pb-5">
-        <h2 className="text-white font-bold text-lg">Desafios</h2>
-        <p className="text-white/70 text-xs mt-0.5">Complete desafios e ganhe pontos e premios</p>
-      </div>
-      <div className="px-4 py-3 space-y-3">
-        {challenges.map(c => {
-          const pct = Math.min(100, (c.progress / c.goal) * 100)
-          const done = c.completed
-          return (
-            <div key={c.id} className={`bg-white rounded-xl border p-4 ${done ? 'border-green-200' : 'border-gray-100'}`}>
-              <div className="flex items-start gap-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${done ? 'bg-green-100' : 'bg-purple-100'}`}>
-                  {done ? <CheckCircle className="w-6 h-6 text-green-600" /> : c.type === 'vitrine' ? <Camera className="w-6 h-6 text-purple-600" /> : c.type === 'vendas' ? <ShoppingCart className="w-6 h-6 text-purple-600" /> : c.type === 'social' ? <Gift className="w-6 h-6 text-purple-600" /> : <Target className="w-6 h-6 text-purple-600" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-gray-800">{c.title}</h4>
-                    <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">{c.points_reward} pts</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{c.description}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${done ? 'bg-green-500' : 'bg-purple-500'}`} style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="text-[10px] text-gray-500 font-medium">{c.progress}/{c.goal}</span>
-                  </div>
-                  {c.reward_kit && <p className="text-[10px] text-emerald-600 mt-1.5 flex items-center gap-1"><Gift className="w-3 h-3" />Premio: {c.reward_kit.name}</p>}
-                  {!done && (
-                    <button onClick={() => submitChallenge(c.id)} className="mt-3 w-full py-2 bg-purple-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1.5">
-                      <Camera className="w-3.5 h-3.5" /> Enviar Comprovante
-                    </button>
-                  )}
-                  {done && <p className="mt-2 text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Desafio concluido!</p>}
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-
-
-  // ========== PROFILE PAGE ==========
-  const PerfilPage = () => (
-    <div className="animate-fade-in">
-      <div className="bg-pink-600 px-4 pt-4 pb-8">
-        <h2 className="text-white font-bold text-lg">Meu Perfil</h2>
-      </div>
-      <div className="px-4 -mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-14 h-14 rounded-full bg-pink-100 flex items-center justify-center">
-              <User className="w-7 h-7 text-pink-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-800">{user?.name}</h3>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-              <p className="text-[10px] text-pink-600 font-medium">{user?.role === 'promotora' ? 'Promotora' : user?.role === 'gerente_loja' ? 'Gerente de Loja' : user?.role === 'vendedor_ruby' ? 'Vendedor Ruby Rose' : 'Admin'}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-yellow-50 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-yellow-600">{user?.points || 0}</p>
-              <p className="text-[10px] text-gray-500">Pontos</p>
-            </div>
-            <div className="bg-pink-50 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-pink-600">{user?.level || 'Bronze'}</p>
-              <p className="text-[10px] text-gray-500">Nivel</p>
-            </div>
-            <div className="bg-purple-50 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-purple-600">{user?.challenges_completed || 0}</p>
-              <p className="text-[10px] text-gray-500">Desafios</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Store info */}
-        {dashboard?.store && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mt-3">
-            <h4 className="font-bold text-gray-800 text-sm mb-2 flex items-center gap-2"><MapPin className="w-4 h-4 text-pink-600" /> Minha Loja</h4>
-            <p className="text-sm text-gray-700">{dashboard.store.name}</p>
-            <p className="text-xs text-gray-500">{dashboard.store.address}</p>
-            <p className="text-xs text-gray-500">{dashboard.store.city} - {dashboard.store.state}</p>
-            <p className="text-[10px] text-gray-400 mt-1">CNPJ: {dashboard.store.cnpj}</p>
-          </div>
-        )}
-
-        {/* Reward kits button */}
-        <button onClick={() => setShowRewardKits(true)} className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mt-3 flex items-center gap-3 text-left">
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><Gift className="w-5 h-5 text-emerald-600" /></div>
-          <div className="flex-1"><p className="text-sm font-medium text-gray-800">Resgatar Premios</p><p className="text-[10px] text-gray-500">Troque seus pontos por kits de produtos</p></div>
-          <ChevronRight className="w-4 h-4 text-gray-400" />
-        </button>
-
-        {/* LGPD / Privacy */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-3 overflow-hidden">
-          <button onClick={() => { setShowPrivacy(true); if (!privacyData) apiFetch('/api/lgpd/privacy-policy').then(r => r.json()).then(setPrivacyData).catch(() => {}) }} className="w-full p-4 flex items-center gap-3 text-left border-b border-gray-50">
-            <Shield className="w-5 h-5 text-gray-500" />
-            <span className="text-sm text-gray-700">Politica de Privacidade</span>
-            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
-          </button>
-          <button onClick={async () => { try { const res = await apiFetch('/api/lgpd/export'); const data = await res.json(); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'meus_dados_rubyrose.json'; a.click() } catch {} }} className="w-full p-4 flex items-center gap-3 text-left border-b border-gray-50">
-            <FileText className="w-5 h-5 text-gray-500" />
-            <span className="text-sm text-gray-700">Exportar meus dados</span>
-            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
-          </button>
-          <button onClick={() => setShowDeleteConfirm(true)} className="w-full p-4 flex items-center gap-3 text-left">
-            <Trash2 className="w-5 h-5 text-red-500" />
-            <span className="text-sm text-red-600">Excluir minha conta</span>
-            <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
-          </button>
-        </div>
-
-        {/* Logout */}
-        <button onClick={doLogout} className="w-full bg-gray-100 rounded-2xl p-4 mt-3 mb-4 flex items-center justify-center gap-2 text-gray-600 font-medium text-sm">
-          <LogOut className="w-4 h-4" /> Sair da conta
-        </button>
-      </div>
-    </div>
-  )
+  // User pages (HomePage, CatalogoPage, PedidosPage, DesafiosPage, PerfilPage)
+  // are extracted to `src/pages/`. They receive state and callbacks via props
+  // from this component — see the `pages` Record below for the wiring.
 
 
   // ========== MODALS ==========
@@ -953,11 +576,53 @@ function MainApp() {
 
   // ========== PAGE MAPPING & NAVIGATION ==========
   const pages: Record<Page, () => JSX.Element> = {
-    inicio: HomePage,
-    catalogo: CatalogoPage,
-    pedidos: PedidosPage,
-    desafios: DesafiosPage,
-    perfil: PerfilPage,
+    inicio: () => (
+      <HomePage
+        user={user}
+        dashboard={dashboard}
+        currentBanner={currentBanner}
+        statusColors={statusColors}
+        statusLabels={statusLabels}
+        statusIcons={statusIcons}
+        setPage={setPage}
+        setShowOrderDetail={setShowOrderDetail}
+        setShowRewardKits={setShowRewardKits}
+      />
+    ),
+    catalogo: () => (
+      <CatalogoPage
+        catalog={catalog}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        fetchCatalog={fetchCatalog}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+      />
+    ),
+    pedidos: () => (
+      <PedidosPage
+        orders={orders}
+        statusColors={statusColors}
+        statusLabels={statusLabels}
+        statusIcons={statusIcons}
+        setPage={setPage}
+        setShowOrderDetail={setShowOrderDetail}
+      />
+    ),
+    desafios: () => <DesafiosPage challenges={challenges} submitChallenge={submitChallenge} />,
+    perfil: () => (
+      <PerfilPage
+        user={user}
+        dashboard={dashboard}
+        privacyData={privacyData}
+        setPrivacyData={setPrivacyData}
+        setShowPrivacy={setShowPrivacy}
+        setShowRewardKits={setShowRewardKits}
+        setShowDeleteConfirm={setShowDeleteConfirm}
+        doLogout={doLogout}
+      />
+    ),
     admin_dash: AdminDashPage,
     admin_users: AdminUsersPage,
     admin_products: AdminProductsPage,
@@ -972,7 +637,7 @@ function MainApp() {
 
   // adminSidebarItems and mobileNavItems moved to <AdminSidebar /> and <BottomNav />.
 
-  const CurrentPage = pages[page] || HomePage
+  const CurrentPage = pages[page] || pages.inicio
   const isAdminPage = page.startsWith('admin_')
 
   // ========== MAIN LAYOUT ==========
