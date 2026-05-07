@@ -1,44 +1,51 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
-import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
+import { Search, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Plus, Minus, MapPin, CheckCircle, Truck, Send, Target, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, ExternalLink, Image, Database, Link2, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 
-const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_URL, tokenStorage } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { useCart } from '@/contexts/CartContext'
+import { useToast } from '@/contexts/ToastContext'
+import { AppModals, type ModalState } from '@/components/AppModals'
+import { BottomNav } from '@/components/BottomNav'
+import { AdminSidebar, AdminMobileChrome } from '@/components/AdminSidebar'
 
-let API = RAW_API
-let tunnelAuth: string | null = null
-try {
-  const u = new URL(RAW_API)
-  if (u.username) {
-    tunnelAuth = btoa(`${u.username}:${u.password}`)
-    u.username = ''
-    u.password = ''
-    API = u.origin + u.pathname.replace(/\/$/, '')
-  }
-} catch { /* not a valid URL, use as-is */ }
-
-let authToken: string | null = localStorage.getItem('auth_token')
-
+// Thin fetch helper that wraps `fetch` with the same JWT Bearer + 401 handling
+// as `lib/api.ts` but returns the raw Response so the existing call sites
+// (which read `.json()` and unwrap manually) keep working. Page-by-page
+// migration to `api.get/post` happens in subsequent PRs.
 const apiFetch = async (path: string, opts?: RequestInit) => {
-  const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> || {}) }
-  if (tunnelAuth) headers['Authorization'] = `Basic ${tunnelAuth}`
-  if (authToken) headers['X-Auth-Token'] = authToken
-  if (!tunnelAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`
-  const res = await fetch(`${API}${path}`, { ...opts, headers })
-  if (res.status === 401) { authToken = null; localStorage.removeItem('auth_token'); window.location.reload() }
-  if (!res.ok) { const err = await res.json().catch(() => ({ message: 'Erro de conexao' })); throw new Error(err.message || err.detail || `Erro ${res.status}`) }
+  const headers = new Headers(opts?.headers)
+  const token = tokenStorage.get()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(`${API_URL}${path}`, { ...opts, headers })
+  if (res.status === 401) {
+    tokenStorage.clear()
+    window.location.assign('/login')
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Erro de conexao' }))
+    throw new Error(err.message || err.detail || `Erro ${res.status}`)
+  }
   return res
 }
 
-type Page = 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil' | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders' | 'admin_company' | 'admin_logs' | 'admin_stock' | 'admin_images' | 'admin_integrations'
-
-interface CartItem { product_id: number; name: string; price: number; quantity: number; min_order: number; image: string }
+export type Page = 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil' | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders' | 'admin_company' | 'admin_logs' | 'admin_stock' | 'admin_images' | 'admin_integrations'
 
 const CHART_COLORS = ['#BE185D', '#EC4899', '#F472B6', '#FB923C', '#A78BFA', '#34D399', '#60A5FA', '#FBBF24']
 
 function MainApp() {
+  // ----- contexts -----
+  const { logout } = useAuth()
+  const { showToast } = useToast()
+  // CartContext owns items/total/qty/clear/submit. cartItems/cartCount used by main UI;
+  // CartModal pulls the rest from the context directly.
+  const { items: cartItems, count: cartCount, addToCart, updateQty: updateCartQty, clear: clearCart, submit: submitCart } = useCart()
+
+  // ----- local state -----
   const [page, setPage] = useState<Page>('inicio')
-  const [isLoggedIn, setIsLoggedIn] = useState(!!authToken)
+  const isLoggedIn = !!tokenStorage.get()
   const [user, setUser] = useState<any>(null)
   const [dashboard, setDashboard] = useState<any>(null)
   const [catalog, setCatalog] = useState<any[]>([])
@@ -47,7 +54,6 @@ function MainApp() {
   const [orders, setOrders] = useState<any[]>([])
   const [challenges, setChallenges] = useState<any[]>([])
   const [rewardKits, setRewardKits] = useState<any[]>([])
-  const [cart, setCart] = useState<CartItem[]>([])
   const [showCart, setShowCart] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentBanner, setCurrentBanner] = useState(0)
@@ -57,7 +63,6 @@ function MainApp() {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [privacyData, setPrivacyData] = useState<any>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
   const [orderSuccess, setOrderSuccess] = useState<any>(null)
   const [adminStats, setAdminStats] = useState<any>(null)
   const [adminUsers, setAdminUsers] = useState<any[]>([])
@@ -83,7 +88,6 @@ function MainApp() {
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
   const unwrap = (resp: any) => resp.data !== undefined ? resp.data : resp
 
   // Login is handled by /login (LoginPage). After successful login the user lands here
@@ -93,22 +97,20 @@ function MainApp() {
   }, [isLoggedIn])
 
   const doLogout = () => {
-    authToken = null
-    localStorage.removeItem('auth_token')
-    setIsLoggedIn(false)
+    logout()
+    clearCart()
     setUser(null)
     setDashboard(null)
-    setCart([])
     setOrders([])
     setChallenges([])
     window.location.assign('/login')
   }
 
-  const fetchDashboard = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/dashboard'); const resp = await res.json(); const d = unwrap(resp); setDashboard(d); setUser(d.user) } catch { } }, [])
+  const fetchDashboard = useCallback(async () => { if (!tokenStorage.get()) return; try { const res = await apiFetch('/api/dashboard'); const resp = await res.json(); const d = unwrap(resp); setDashboard(d); setUser(d.user) } catch { } }, [])
   const fetchCatalog = useCallback(async (cat?: string) => { try { const q = cat && cat !== 'Todas' ? `?category=${encodeURIComponent(cat)}` : ''; const res = await apiFetch(`/api/catalog${q}`); const resp = await res.json(); const d = unwrap(resp); setCatalog(Array.isArray(d) ? d : resp.data || []) } catch { } }, [])
   const fetchCategories = useCallback(async () => { try { const res = await apiFetch('/api/catalog/categories'); const resp = await res.json(); const d = unwrap(resp); setCategories(d.categories || d || []) } catch { } }, [])
-  const fetchOrders = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/orders'); const resp = await res.json(); const d = unwrap(resp); setOrders(Array.isArray(d) ? d : d.orders || []) } catch { } }, [])
-  const fetchChallenges = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/challenges'); const resp = await res.json(); const d = unwrap(resp); setChallenges(d.challenges || d || []) } catch { } }, [])
+  const fetchOrders = useCallback(async () => { if (!tokenStorage.get()) return; try { const res = await apiFetch('/api/orders'); const resp = await res.json(); const d = unwrap(resp); setOrders(Array.isArray(d) ? d : d.orders || []) } catch { } }, [])
+  const fetchChallenges = useCallback(async () => { if (!tokenStorage.get()) return; try { const res = await apiFetch('/api/challenges'); const resp = await res.json(); const d = unwrap(resp); setChallenges(d.challenges || d || []) } catch { } }, [])
   const fetchRewardKits = useCallback(async () => { try { const res = await apiFetch('/api/rewards/kits'); const resp = await res.json(); const d = unwrap(resp); setRewardKits(d.kits || d || []) } catch { } }, [])
 
   const fetchAdminStats = useCallback(async () => { try { const r = await apiFetch('/api/admin/stats'); const resp = await r.json(); setAdminStats(unwrap(resp)) } catch { } }, [])
@@ -142,11 +144,16 @@ function MainApp() {
 
   useEffect(() => { if (dashboard?.banners?.length > 1) { const t = setInterval(() => setCurrentBanner(b => (b + 1) % dashboard.banners.length), 4000); return () => clearInterval(t) } }, [dashboard?.banners])
 
-  const addToCart = (product: any) => { setCart(prev => { const existing = prev.find(i => i.product_id === product.id); if (existing) return prev.map(i => i.product_id === product.id ? { ...i, quantity: i.quantity + product.min_order } : i); return [...prev, { product_id: product.id, name: product.name, price: product.price, quantity: product.min_order, min_order: product.min_order, image: product.image }] }); showToast(`${product.name} adicionado ao carrinho`) }
-  const updateCartQty = (productId: number, delta: number) => { setCart(prev => prev.map(i => { if (i.product_id !== productId) return i; const newQty = i.quantity + delta; return newQty >= i.min_order ? { ...i, quantity: newQty } : i }).filter(i => i.quantity >= i.min_order)) }
-  const removeFromCart = (productId: number) => { setCart(prev => prev.filter(i => i.product_id !== productId)) }
-
-  const submitOrder = async () => { if (cart.length === 0) return; try { const res = await apiFetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })) }) }); const resp = await res.json(); setOrderSuccess(unwrap(resp)); setCart([]); setShowCart(false); fetchOrders(); fetchDashboard() } catch (e: any) { showToast(e.message) } }
+  // Cart logic now lives in CartContext (addToCart, updateCartQty, removeFromCart, clearCart, submitCart).
+  const submitOrder = async () => {
+    if (cartItems.length === 0) return
+    const result = await submitCart()
+    if (!result) return
+    setOrderSuccess({ message: 'Pedido enviado com sucesso!', order: result.order })
+    setShowCart(false)
+    fetchOrders()
+    fetchDashboard()
+  }
   const submitChallenge = async (challengeId: string) => { try { const res = await apiFetch('/api/challenges/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge_id: challengeId, notes: 'Foto da vitrine enviada via app' }) }); const resp = await res.json(); showToast(resp.message || 'Enviado!'); fetchChallenges(); fetchDashboard() } catch (e: any) { showToast(e.message) } }
   const redeemKit = async (kitId: string) => { try { const res = await apiFetch('/api/rewards/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kit_id: kitId }) }); const resp = await res.json(); showToast(resp.message || 'Resgatado!'); fetchDashboard(); fetchRewardKits() } catch (e: any) { showToast(e.message) } }
 
@@ -158,8 +165,7 @@ function MainApp() {
     try { const fd = new FormData(); fd.append('file', file); const res = await apiFetch('/api/upload', { method: 'POST', body: fd }); const resp = await res.json(); setUploading(false); return unwrap(resp)?.url || null } catch (e: any) { showToast(e.message); setUploading(false); return null }
   }
 
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0)
-  const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
+  // cartTotal and cartCount come from useCart() above.
   const statusColors: Record<string, string> = { enviado: 'bg-blue-100 text-blue-700', aprovado: 'bg-emerald-100 text-emerald-700', em_separacao: 'bg-yellow-100 text-yellow-700', em_transito: 'bg-purple-100 text-purple-700', entregue: 'bg-green-100 text-green-700', cancelado: 'bg-red-100 text-red-700' }
   const statusLabels: Record<string, string> = { enviado: 'Enviado', aprovado: 'Aprovado', em_separacao: 'Em Separacao', em_transito: 'Em Transito', entregue: 'Entregue', cancelado: 'Cancelado' }
   const statusIcons: Record<string, any> = { enviado: Send, aprovado: CheckCircle, em_separacao: Package, em_transito: Truck, entregue: Check, cancelado: X }
@@ -376,7 +382,7 @@ function MainApp() {
             {/* Products grid */}
             <div className="px-4 pb-4 grid grid-cols-2 gap-3">
               {filtered.map(p => {
-                const inCart = cart.find(i => i.product_id === p.id)
+                const inCart = cartItems.find(i => i.product_id === p.id)
                 return (
                   <div key={p.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                     <div className="h-28 bg-gradient-to-br from-pink-50 to-rose-50 flex items-center justify-center">
@@ -580,215 +586,28 @@ function MainApp() {
 
 
   // ========== MODALS ==========
+  // Modals are extracted to <AppModals /> rendered at the bottom of the layout.
+  // Toasts are rendered globally in main.tsx via <ToastViewport />.
 
-  // Cart Modal
-  const CartModal = () => showCart ? (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setShowCart(false)} />
-      <div className="relative bg-white rounded-t-3xl w-full max-w-[430px] max-h-[80vh] overflow-y-auto animate-slide-up">
-        <div className="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-bold text-gray-800">Carrinho ({cartCount} itens)</h3>
-          <button onClick={() => setShowCart(false)}><X className="w-5 h-5 text-gray-500" /></button>
-        </div>
-        <div className="p-4 space-y-3">
-          {cart.length === 0 ? (
-            <div className="text-center py-8">
-              <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-gray-500 text-sm">Carrinho vazio</p>
-            </div>
-          ) : (
-            <>
-              {cart.map(item => (
-                <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
-                  <div className="w-12 h-12 rounded-lg bg-pink-50 flex items-center justify-center flex-shrink-0">
-                    <ShoppingBag className="w-5 h-5 text-pink-300" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
-                    <p className="text-[10px] text-gray-400">R${item.price.toFixed(2)}/un</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => updateCartQty(item.product_id, -1)} className="w-6 h-6 rounded-full bg-white border flex items-center justify-center"><Minus className="w-3 h-3" /></button>
-                    <span className="text-xs font-bold w-6 text-center">{item.quantity}</span>
-                    <button onClick={() => updateCartQty(item.product_id, 1)} className="w-6 h-6 rounded-full bg-pink-100 flex items-center justify-center"><Plus className="w-3 h-3 text-pink-600" /></button>
-                  </div>
-                  <button onClick={() => removeFromCart(item.product_id)}><X className="w-4 h-4 text-red-400" /></button>
-                </div>
-              ))}
-              <div className="border-t border-gray-100 pt-3 mt-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-600">Total do pedido</span>
-                  <span className="text-lg font-bold text-gray-800">R${cartTotal.toFixed(2)}</span>
-                </div>
-                <p className="text-[10px] text-gray-400 mb-3">+{Math.floor(cartTotal / 20)} pontos estimados</p>
-                <button onClick={submitOrder} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2">
-                  <Send className="w-4 h-4" /> Enviar Pedido para Loja
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  ) : null
-
-  // Order Detail Modal
-  const OrderDetailModal = () => showOrderDetail ? (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setShowOrderDetail(null)} />
-      <div className="relative bg-white rounded-t-3xl w-full max-w-[430px] max-h-[80vh] overflow-y-auto animate-slide-up">
-        <div className="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-bold text-gray-800">Pedido {showOrderDetail.id}</h3>
-          <button onClick={() => setShowOrderDetail(null)}><X className="w-5 h-5 text-gray-500" /></button>
-        </div>
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm font-medium text-gray-800">{showOrderDetail.store_name}</p>
-              <p className="text-[10px] text-gray-400">{new Date(showOrderDetail.created_at).toLocaleDateString('pt-BR')}</p>
-            </div>
-            <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusColors[showOrderDetail.status] || 'bg-gray-100'}`}>{statusLabels[showOrderDetail.status] || showOrderDetail.status}</span>
-          </div>
-          <div className="space-y-2 mb-4">
-            {showOrderDetail.items?.map((item: any, i: number) => (
-              <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-800">{item.name}</p>
-                  <p className="text-[10px] text-gray-400">{item.quantity} x R${item.unit_price.toFixed(2)}</p>
-                </div>
-                <p className="text-sm font-bold text-gray-800">R${item.total.toFixed(2)}</p>
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-gray-100 pt-3">
-            <div className="flex justify-between"><span className="text-sm text-gray-500">Total</span><span className="text-lg font-bold">R${showOrderDetail.total_value.toFixed(2)}</span></div>
-            <div className="flex justify-between mt-1"><span className="text-xs text-gray-500">Pontos ganhos</span><span className="text-xs font-bold text-yellow-600">+{showOrderDetail.points_earned} pts</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  ) : null
-
-  // Order Success Modal
-  const OrderSuccessModal = () => orderSuccess ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setOrderSuccess(null)} />
-      <div className="relative bg-white rounded-3xl w-full max-w-[380px] p-6 text-center animate-slide-up">
-        <div className="w-16 h-16 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-4"><CheckCircle className="w-8 h-8 text-green-600" /></div>
-        <h3 className="text-lg font-bold text-gray-800 mb-1">Pedido Enviado!</h3>
-        <p className="text-sm text-gray-500 mb-4">{orderSuccess.message}</p>
-        <div className="bg-yellow-50 rounded-xl p-3 mb-4">
-          <p className="text-xs text-gray-500">Pontos ganhos neste pedido</p>
-          <p className="text-2xl font-bold text-yellow-600">+{orderSuccess.order?.points_earned || 0} pts</p>
-        </div>
-        <button onClick={() => { setOrderSuccess(null); setPage('pedidos') }} className="w-full py-3 bg-pink-600 text-white rounded-xl font-semibold text-sm">Ver Meus Pedidos</button>
-      </div>
-    </div>
-  ) : null
-
-  // Reward Kits Modal
-  const RewardKitsModal = () => showRewardKits ? (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setShowRewardKits(false)} />
-      <div className="relative bg-white rounded-t-3xl w-full max-w-[430px] max-h-[80vh] overflow-y-auto animate-slide-up">
-        <div className="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-gray-800">Resgatar Premios</h3>
-            <p className="text-xs text-gray-500">Seus pontos: <span className="font-bold text-yellow-600">{user?.points || 0}</span></p>
-          </div>
-          <button onClick={() => setShowRewardKits(false)}><X className="w-5 h-5 text-gray-500" /></button>
-        </div>
-        <div className="p-4 space-y-3">
-          {rewardKits.map(k => {
-            const canRedeem = (user?.points || 0) >= k.points_cost
-            return (
-              <div key={k.id} className={`bg-white rounded-xl border p-4 ${canRedeem ? 'border-emerald-200' : 'border-gray-100 opacity-60'}`}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${canRedeem ? 'bg-emerald-100' : 'bg-gray-100'}`}>
-                    <Award className="w-6 h-6 text-emerald-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-bold text-gray-800">{k.name}</h4>
-                    <p className="text-xs text-gray-500 mt-0.5">{k.description}</p>
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-sm font-bold text-yellow-600">{k.points_cost} pontos</span>
-                      <button onClick={() => canRedeem && redeemKit(k.id)} disabled={!canRedeem}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-medium ${canRedeem ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-400'}`}>
-                        {canRedeem ? 'Resgatar' : 'Pontos insuficientes'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  ) : null
-
-  // LGPD Consent Banner
-  const LGPDBanner = () => showLGPD ? (
-    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 w-full max-w-[410px] px-3">
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4">
-        <div className="flex items-start gap-3">
-          <Shield className="w-5 h-5 text-pink-600 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="text-sm font-bold text-gray-800">Privacidade e Dados</h4>
-            <p className="text-xs text-gray-500 mt-1">Utilizamos seus dados para processar pedidos, calcular pontos e melhorar sua experiencia. Ao continuar, voce concorda com nossa politica de privacidade.</p>
-            <div className="flex gap-2 mt-3">
-              <button onClick={() => { setShowLGPD(false); localStorage.setItem('lgpd_consent_b2b', 'true'); apiFetch('/api/lgpd/consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ consent_data_collection: true, consent_marketing: true, consent_third_party: false }) }).catch(() => {}) }}
-                className="flex-1 py-2 bg-pink-600 text-white rounded-xl text-xs font-medium">Aceitar</button>
-              <button onClick={() => { setShowPrivacy(true); if (!privacyData) apiFetch('/api/lgpd/privacy-policy').then(r => r.json()).then(setPrivacyData).catch(() => {}) }}
-                className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium">Ler mais</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  ) : null
-
-  // Privacy Policy Modal
-  const PrivacyModal = () => showPrivacy ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setShowPrivacy(false)} />
-      <div className="relative bg-white rounded-3xl w-full max-w-[400px] max-h-[80vh] overflow-y-auto p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-800">{privacyData?.title || 'Politica de Privacidade'}</h3>
-          <button onClick={() => setShowPrivacy(false)}><X className="w-5 h-5 text-gray-500" /></button>
-        </div>
-        {privacyData?.sections?.map((s: any, i: number) => (
-          <div key={i} className="mb-4">
-            <h4 className="text-sm font-bold text-gray-700">{s.title}</h4>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">{s.content}</p>
-          </div>
-        )) || <p className="text-sm text-gray-500">Carregando...</p>}
-      </div>
-    </div>
-  ) : null
-
-  // Delete Confirm Modal
-  const DeleteModal = () => showDeleteConfirm ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setShowDeleteConfirm(false)} />
-      <div className="relative bg-white rounded-3xl w-full max-w-[380px] p-6 text-center">
-        <div className="w-14 h-14 mx-auto rounded-full bg-red-100 flex items-center justify-center mb-4"><AlertTriangle className="w-7 h-7 text-red-600" /></div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2">Excluir conta?</h3>
-        <p className="text-sm text-gray-500 mb-4">Esta acao e irreversivel. Todos os seus dados, pedidos, pontos e historico serao removidos permanentemente conforme a LGPD.</p>
-        <div className="flex gap-2">
-          <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium">Cancelar</button>
-          <button onClick={async () => { try { await apiFetch('/api/lgpd/data', { method: 'DELETE' }); doLogout() } catch {} }} className="flex-1 py-3 bg-red-600 text-white rounded-xl text-sm font-medium">Excluir</button>
-        </div>
-      </div>
-    </div>
-  ) : null
-
-  // Toast notification
-  const Toast = () => toast ? (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-[380px] w-full px-3 animate-slide-up">
-      <div className="bg-gray-800 text-white rounded-xl px-4 py-3 text-sm text-center shadow-lg">{toast}</div>
-    </div>
-  ) : null
+  const acceptLgpd = () => {
+    setShowLGPD(false)
+    localStorage.setItem('lgpd_consent_b2b', 'true')
+    apiFetch('/api/lgpd/consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consent_data_collection: true, consent_marketing: true, consent_third_party: false }),
+    }).catch(() => {})
+  }
+  const requestPrivacy = () => {
+    setShowPrivacy(true)
+    if (!privacyData) apiFetch('/api/lgpd/privacy-policy').then((r) => r.json()).then(setPrivacyData).catch(() => {})
+  }
+  const confirmDeleteAccount = async () => {
+    try {
+      await apiFetch('/api/lgpd/data', { method: 'DELETE' })
+      doLogout()
+    } catch { /* swallowed */ }
+  }
 
   // ========== ADMIN FORM HELPERS ==========
   const adminFormField = (label: string, key: string, type = 'text', placeholder = '') => (
@@ -1076,7 +895,7 @@ function MainApp() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {adminImages.map((img: any) => (
           <div key={img.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm group">
-            <div className="aspect-square bg-gray-100 flex items-center justify-center">{img.url ? <img src={img.url.startsWith('/') ? `${API}${img.url}` : img.url} alt={img.name} className="w-full h-full object-cover" /> : <Image className="w-8 h-8 text-gray-300" />}</div>
+            <div className="aspect-square bg-gray-100 flex items-center justify-center">{img.url ? <img src={img.url.startsWith('/') ? `${API_URL}${img.url}` : img.url} alt={img.name} className="w-full h-full object-cover" /> : <Image className="w-8 h-8 text-gray-300" />}</div>
             <div className="p-3">
               <p className="text-sm font-medium text-gray-800 truncate">{img.name}</p>
               <p className="text-xs text-gray-500">{img.type} {img.product_name ? `- ${img.product_name}` : ''}</p>
@@ -1151,110 +970,63 @@ function MainApp() {
     admin_integrations: AdminIntegrationsPage,
   }
 
-  const adminSidebarItems: { page: Page, icon: any, label: string }[] = [
-    { page: 'admin_dash', icon: BarChart3, label: 'Dashboard' },
-    { page: 'admin_users', icon: Users, label: 'Usuarios' },
-    { page: 'admin_products', icon: Package, label: 'Produtos' },
-    { page: 'admin_stock', icon: Database, label: 'Estoque' },
-    { page: 'admin_orders', icon: ShoppingCart, label: 'Pedidos' },
-    { page: 'admin_banners', icon: BookOpen, label: 'Banners' },
-    { page: 'admin_images', icon: Image, label: 'Imagens' },
-    { page: 'admin_integrations', icon: Link2, label: 'Integracoes' },
-    { page: 'admin_company', icon: Settings, label: 'Empresa' },
-    { page: 'admin_logs', icon: Activity, label: 'Logs' },
-  ]
-
-  const mobileNavItems: { page: Page, icon: any, label: string }[] = [
-    { page: 'inicio', icon: Home, label: 'Inicio' },
-    { page: 'catalogo', icon: ShoppingBag, label: 'Catalogo' },
-    { page: 'pedidos', icon: Package, label: 'Pedidos' },
-    { page: 'desafios', icon: Trophy, label: 'Desafios' },
-    { page: 'perfil', icon: User, label: 'Perfil' },
-  ]
+  // adminSidebarItems and mobileNavItems moved to <AdminSidebar /> and <BottomNav />.
 
   const CurrentPage = pages[page] || HomePage
   const isAdminPage = page.startsWith('admin_')
 
   // ========== MAIN LAYOUT ==========
+  const modalProps: ModalState = {
+    showCart, setShowCart, onSubmitOrder: submitOrder,
+    showOrderDetail, setShowOrderDetail, statusColors, statusLabels,
+    orderSuccess, setOrderSuccess, onViewOrders: () => setPage('pedidos'),
+    showRewardKits, setShowRewardKits, rewardKits, user, onRedeem: redeemKit,
+    showLGPD, setShowLGPD, setShowPrivacy, privacyData, setPrivacyData,
+    onAcceptLgpd: acceptLgpd, onRequestPrivacy: requestPrivacy,
+    showPrivacy,
+    showDeleteConfirm, setShowDeleteConfirm, onConfirmDelete: confirmDeleteAccount,
+  }
+
   return (
     <div className={`app-container ${isAdminPage ? 'admin-active' : ''}`}>
-      {/* ADMIN SIDEBAR (desktop) */}
       {isAdminPage && (
-        <div className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-100 shadow-sm transition-all duration-300 ${sidebarOpen ? 'w-60' : 'w-16'} hidden lg:flex flex-col`}>
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            {sidebarOpen && <div className="flex items-center gap-2"><Sparkles className="w-6 h-6 text-pink-600" /><span className="font-bold text-gray-800">Admin</span></div>}
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5 text-gray-500" /></button>
-          </div>
-          <nav className="flex-1 py-2 overflow-y-auto">
-            {adminSidebarItems.map(item => (
-              <button key={item.page} onClick={() => setPage(item.page)} className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition hover:bg-pink-50 ${page === item.page ? 'bg-pink-50 text-pink-700 font-medium border-r-2 border-pink-600' : 'text-gray-600'}`}>
-                <item.icon className="w-5 h-5 flex-shrink-0" />{sidebarOpen && <span>{item.label}</span>}
-              </button>
-            ))}
-          </nav>
-          <div className="p-4 border-t border-gray-100">
-            <button onClick={() => setPage('inicio')} className="w-full flex items-center gap-2 py-2 px-3 text-sm text-gray-600 hover:bg-gray-50 rounded-xl"><Home className="w-4 h-4" />{sidebarOpen && <span>Voltar ao App</span>}</button>
-            <button onClick={doLogout} className="w-full flex items-center gap-2 py-2 px-3 text-sm text-red-500 hover:bg-red-50 rounded-xl mt-1"><LogOut className="w-4 h-4" />{sidebarOpen && <span>Sair</span>}</button>
-          </div>
-        </div>
+        <AdminSidebar
+          current={page}
+          onChange={setPage}
+          open={sidebarOpen}
+          setOpen={setSidebarOpen}
+          onBackToApp={() => setPage('inicio')}
+          onLogout={doLogout}
+        />
       )}
 
-      {/* MAIN CONTENT */}
       <div className={`main-scroll ${isAdminPage ? (sidebarOpen ? 'lg:ml-60' : 'lg:ml-16') : ''}`}>
-        {/* Admin mobile header */}
         {isAdminPage && (
-          <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-pink-600" /><span className="font-bold text-gray-800 text-sm">Admin Panel</span></div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage('inicio')} className="p-2 hover:bg-gray-100 rounded-lg"><Home className="w-4 h-4" /></button>
-              <button onClick={doLogout} className="p-2 hover:bg-red-50 rounded-lg text-red-500"><LogOut className="w-4 h-4" /></button>
-            </div>
-          </div>
+          <AdminMobileChrome
+            current={page}
+            onChange={setPage}
+            onBackToApp={() => setPage('inicio')}
+            onLogout={doLogout}
+          />
         )}
-        {/* Admin mobile nav tabs */}
-        {isAdminPage && (
-          <div className="lg:hidden overflow-x-auto border-b border-gray-100 bg-white">
-            <div className="flex min-w-max">{adminSidebarItems.map(item => (
-              <button key={item.page} onClick={() => setPage(item.page)} className={`flex flex-col items-center gap-1 px-4 py-2.5 text-xs whitespace-nowrap transition ${page === item.page ? 'text-pink-700 border-b-2 border-pink-600 font-medium' : 'text-gray-500'}`}>
-                <item.icon className="w-4 h-4" /><span>{item.label}</span>
-              </button>
-            ))}</div>
-          </div>
-        )}
-
         <CurrentPage />
       </div>
 
-      {/* PROMOTORA BOTTOM NAV (non-admin) */}
       {!isAdminPage && (
-        <div className="bottom-nav">
-          {mobileNavItems.map(item => (
-            <button key={item.page} onClick={() => setPage(item.page)} className={`nav-item ${page === item.page ? 'active' : ''}`}>
-              <item.icon className="w-5 h-5" /><span className="text-xs">{item.label}</span>
-            </button>
-          ))}
-          {user?.role === 'admin' && (
-            <button onClick={() => setPage('admin_dash')} className="nav-item"><Settings className="w-5 h-5" /><span className="text-xs">Admin</span></button>
-          )}
-        </div>
+        <BottomNav current={page} onChange={setPage} showAdmin={user?.role === 'admin'} />
       )}
 
-      {/* FLOATING CART */}
       {!isAdminPage && cartCount > 0 && !showCart && (
-        <button onClick={() => setShowCart(true)} className="fixed bottom-20 right-4 z-30 bg-pink-600 text-white rounded-full p-3.5 shadow-lg flex items-center gap-2">
-          <ShoppingCart className="w-5 h-5" /><span className="text-sm font-medium">{cartCount}</span>
+        <button
+          onClick={() => setShowCart(true)}
+          className="fixed bottom-20 right-4 z-30 bg-brand-600 text-white rounded-full p-3.5 shadow-lg flex items-center gap-2"
+        >
+          <ShoppingCart className="w-5 h-5" />
+          <span className="text-sm font-medium">{cartCount}</span>
         </button>
       )}
 
-      {/* MODALS */}
-      {showCart && <CartModal />}
-      {showOrderDetail && <OrderDetailModal />}
-      {orderSuccess && <OrderSuccessModal />}
-      {showRewardKits && <RewardKitsModal />}
-      {showLGPD && <LGPDBanner />}
-      {showPrivacy && <PrivacyModal />}
-      {showDeleteConfirm && <DeleteModal />}
-      {toast && <Toast />}
+      <AppModals {...modalProps} />
     </div>
   )
 }
