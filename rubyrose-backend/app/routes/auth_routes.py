@@ -1,14 +1,16 @@
 """Auth Routes - Registration, Login, Profile"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi import HTTPException
 import bcrypt
 import uuid
 from datetime import datetime, timezone
 
 from app.auth import create_token, require_auth, safe_user_response
+from app.config import settings
 from app.database import users_db, stores_db
 from app.models import RegisterRequest, LoginRequest
+from app.rate_limit import limiter
 from app.responses import success_response
 from app.logger import log_activity
 
@@ -16,7 +18,8 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 @router.post("/register")
-def register(req: RegisterRequest):
+@limiter.limit(settings.rate_limit_register)
+def register(request: Request, req: RegisterRequest):
     if req.email in users_db:
         raise HTTPException(status_code=400, detail="Email ja cadastrado")
     if req.role not in ["promotora", "gerente_loja"]:
@@ -46,7 +49,8 @@ def register(req: RegisterRequest):
 
 
 @router.post("/login")
-def login(req: LoginRequest):
+@limiter.limit(settings.rate_limit_login)
+def login(request: Request, req: LoginRequest):
     user = users_db.get(req.email)
     if not user or not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")

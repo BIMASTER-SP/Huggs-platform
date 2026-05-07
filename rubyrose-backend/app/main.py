@@ -39,15 +39,20 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 import os
 import time
 
+from app.config import settings
 from app.database import seed_data
+from app.rate_limit import limiter
 from app.responses import success_response, error_response
 from app.logger import get_logger, log_system_event
 
 # ============================================================
-# APP SETUP (keep CORS untouched per deployment requirements)
+# APP SETUP
 # ============================================================
 app = FastAPI(
     title="Ruby Rose B2B API",
@@ -57,11 +62,17 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting: per-endpoint limits are applied via @limiter.limit() in each router;
+# default_limits in app.rate_limit applies to everything else.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 logger = get_logger("main")
 

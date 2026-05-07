@@ -2,11 +2,13 @@
 
 import re
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import require_auth, get_current_user
+from app.config import settings
 from app.database import receipts_db
 from app.models import CupomLookupRequest, QRCodeScanRequest
+from app.rate_limit import limiter
 from app.responses import success_response
 from app.utils import simulate_nfe_lookup, process_nfe
 
@@ -14,7 +16,8 @@ router = APIRouter(prefix="/api/receipts", tags=["Receipts"])
 
 
 @router.post("/lookup")
-def lookup_cupom(req: CupomLookupRequest):
+@limiter.limit(settings.rate_limit_cupom_lookup)
+def lookup_cupom(request: Request, req: CupomLookupRequest):
     clean_key = re.sub(r"\D", "", req.access_key)
     if len(clean_key) < 44:
         raise HTTPException(status_code=400, detail="Chave de acesso deve ter 44 digitos")
@@ -23,7 +26,8 @@ def lookup_cupom(req: CupomLookupRequest):
 
 
 @router.post("/scan")
-def scan_qrcode(req: QRCodeScanRequest, user: Optional[dict] = Depends(get_current_user)):
+@limiter.limit(settings.rate_limit_cupom_lookup)
+def scan_qrcode(request: Request, req: QRCodeScanRequest, user: Optional[dict] = Depends(get_current_user)):
     qr_data = req.qr_data
     if "chNFe=" in qr_data:
         match = re.search(r"chNFe=(\d{44})", qr_data)

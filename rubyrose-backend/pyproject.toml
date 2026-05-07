@@ -12,6 +12,8 @@ psycopg = {extras = ["binary"], version = "^3.3.3"}
 pyjwt = "^2.11.0"
 python-multipart = "^0.0.22"
 bcrypt = "^5.0.0"
+pydantic-settings = "^2.6.1"
+slowapi = "^0.1.9"
 
 
 [build-system]
