@@ -1,16 +1,16 @@
 """Receipt Routes - Cupom fiscal lookup, QR scan, history"""
 
 import re
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.auth import require_auth, get_current_user
+from app.auth import get_current_user, require_auth
 from app.config import settings
 from app.database import receipts_db
 from app.models import CupomLookupRequest, QRCodeScanRequest
 from app.rate_limit import limiter
 from app.responses import success_response
-from app.utils import simulate_nfe_lookup, process_nfe
+from app.utils import process_nfe, simulate_nfe_lookup
 
 router = APIRouter(prefix="/api/receipts", tags=["Receipts"])
 
@@ -27,7 +27,7 @@ def lookup_cupom(request: Request, req: CupomLookupRequest):
 
 @router.post("/scan")
 @limiter.limit(settings.rate_limit_cupom_lookup)
-def scan_qrcode(request: Request, req: QRCodeScanRequest, user: Optional[dict] = Depends(get_current_user)):
+def scan_qrcode(request: Request, req: QRCodeScanRequest, user: dict | None = Depends(get_current_user)):
     qr_data = req.qr_data
     if "chNFe=" in qr_data:
         match = re.search(r"chNFe=(\d{44})", qr_data)

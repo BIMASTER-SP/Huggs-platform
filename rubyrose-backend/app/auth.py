@@ -9,12 +9,11 @@ Future migration path:
   - Integrate with API Gateway authorizers
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 from app.database import users_db
@@ -28,8 +27,8 @@ def create_token(user_id: str, email: str, role: str) -> str:
         "sub": user_id,
         "email": email,
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expiration_hours),
-        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(UTC) + timedelta(hours=settings.jwt_expiration_hours),
+        "iat": datetime.now(UTC),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -38,15 +37,15 @@ def decode_token(token: str) -> dict:
     """Decode and validate a JWT token."""
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token invalido")
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token expirado") from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail="Token invalido") from exc
 
 
 def _extract_token(
-    credentials: Optional[HTTPAuthorizationCredentials], request: Request
-) -> Optional[str]:
+    credentials: HTTPAuthorizationCredentials | None, request: Request
+) -> str | None:
     """Extract JWT token from Bearer header or X-Auth-Token custom header.
     X-Auth-Token is used when Authorization header is occupied by tunnel Basic Auth."""
     if credentials and credentials.scheme.lower() == "bearer":
@@ -66,9 +65,9 @@ def safe_user_response(user: dict) -> dict:
 # FASTAPI DEPENDENCIES
 # ============================================================
 def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     request: Request = None,
-) -> Optional[dict]:
+) -> dict | None:
     """Get current user if authenticated, or None if not."""
     token = _extract_token(credentials, request)
     if token is None:
@@ -84,7 +83,7 @@ def get_current_user(
 
 
 def require_auth(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     request: Request = None,
 ) -> dict:
     """Require authentication. Raises 401 if not authenticated."""

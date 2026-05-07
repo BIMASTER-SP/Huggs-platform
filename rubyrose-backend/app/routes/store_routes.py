@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_auth, require_role, safe_user_response
-from app.database import stores_db, users_db, orders_db
+from app.database import orders_db, stores_db, users_db
 from app.responses import success_response
 
 router = APIRouter(prefix="/api/stores", tags=["Stores"])

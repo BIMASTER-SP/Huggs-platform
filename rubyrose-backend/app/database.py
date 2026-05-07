@@ -11,7 +11,8 @@ Future migration path:
   - Add connection pooling for RDS
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import bcrypt
 
 # ============================================================
@@ -48,7 +49,7 @@ company_settings_db: dict = {
     "cnpj": "00.000.000/0001-00",
     "address": "Rua da Beleza, 500 - Sao Paulo, SP",
     "about": "Ruby Rose Cosmeticos - Lider em maquiagem e cuidados pessoais no Brasil.",
-    "updated_at": datetime.now(timezone.utc).isoformat(),
+    "updated_at": datetime.now(UTC).isoformat(),
 }
 
 # ============================================================
@@ -75,12 +76,12 @@ RUBY_ROSE_PRODUCTS_EAN = {
 
 def seed_data():
     """Initialize database with seed data. Called once at startup."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Seed users
-    admin_hash = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
-    ana_hash = bcrypt.hashpw("ana123".encode(), bcrypt.gensalt()).decode()
-    carlos_hash = bcrypt.hashpw("carlos123".encode(), bcrypt.gensalt()).decode()
+    admin_hash = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode()
+    ana_hash = bcrypt.hashpw(b"ana123", bcrypt.gensalt()).decode()
+    carlos_hash = bcrypt.hashpw(b"carlos123", bcrypt.gensalt()).decode()
 
     users_db["admin@rubyrose.com.br"] = {
         "id": "admin-001", "name": "Admin Ruby Rose", "email": "admin@rubyrose.com.br",

@@ -1,16 +1,22 @@
 """LGPD Compliance Routes - Privacy policy, consent, data export/deletion"""
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timezone
 
 from app.auth import require_auth, safe_user_response
 from app.database import (
-    users_db, lgpd_consents_db, orders_db, receipts_db,
-    challenge_submissions_db, redemptions_db, stores_db,
+    challenge_submissions_db,
+    lgpd_consents_db,
+    orders_db,
+    receipts_db,
+    redemptions_db,
+    stores_db,
+    users_db,
 )
+from app.logger import log_activity
 from app.models import LGPDConsentRequest
 from app.responses import success_response
-from app.logger import log_activity
 
 router = APIRouter(prefix="/api/lgpd", tags=["LGPD"])
 
@@ -40,10 +46,10 @@ def submit_consent(req: LGPDConsentRequest, user: dict = Depends(require_auth)):
         "consent_data_collection": req.consent_data_collection,
         "consent_marketing": req.consent_marketing,
         "consent_third_party": req.consent_third_party,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     user["lgpd_consent"] = req.consent_data_collection
-    user["lgpd_consent_date"] = datetime.now(timezone.utc).isoformat()
+    user["lgpd_consent_date"] = datetime.now(UTC).isoformat()
     return success_response(message="Consentimento registrado com sucesso")
 
 
@@ -67,7 +73,7 @@ def export_user_data(user: dict = Depends(require_auth)):
         "orders": user_orders, "receipts": user_receipts,
         "challenge_submissions": user_subs, "redemptions": user_redemptions,
         "consent": lgpd_consents_db.get(user["email"]),
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
     })
 
 

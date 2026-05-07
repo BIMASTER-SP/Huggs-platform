@@ -1,14 +1,15 @@
 """Challenge Routes - List, submit, create challenges"""
 
-from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
-from app.auth import require_auth, require_admin
-from app.database import challenges_db, challenge_submissions_db, reward_kits_db
-from app.models import ChallengeSubmissionRequest, ChallengeCreateRequest
-from app.responses import success_response
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.auth import require_auth
+from app.database import challenge_submissions_db, challenges_db, reward_kits_db
 from app.logger import log_activity
+from app.models import ChallengeSubmissionRequest
+from app.responses import success_response
 
 router = APIRouter(prefix="/api/challenges", tags=["Challenges"])
 
@@ -52,7 +53,7 @@ def submit_challenge(req: ChallengeSubmissionRequest, user: dict = Depends(requi
         "id": sub_id, "user_id": user["id"], "challenge_id": req.challenge_id,
         "photo_url": req.photo_url or f"https://storage.rubyrose.com/vitrines/{sub_id}.jpg",
         "notes": req.notes, "status": "pendente",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     challenge_submissions_db.append(submission)
     new_count = len(user_subs) + 1

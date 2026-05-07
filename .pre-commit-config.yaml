@@ -1,0 +1,33 @@
+# Run with: pre-commit run --all-files
+# Install hooks: pre-commit install
+# (https://pre-commit.com)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        files: ^rubyrose-backend/
+        args: [--fix]
+      - id: ruff-format
+        files: ^rubyrose-backend/
+
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: eslint (frontend)
+        entry: bash -c 'cd rubyrose-frontend && npx eslint --fix'
+        language: system
+        files: ^rubyrose-frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: true

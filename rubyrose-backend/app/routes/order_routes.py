@@ -1,15 +1,15 @@
 """Order Routes - Create, list, detail, status update with pagination"""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_auth, require_role
-from app.database import orders_db, stores_db, CATALOG_PRODUCTS
-from app.models import CreateOrderRequest
-from app.responses import success_response, paginated_response, apply_pagination
+from app.database import CATALOG_PRODUCTS, orders_db, stores_db
 from app.logger import log_activity
+from app.models import CreateOrderRequest
+from app.responses import apply_pagination, paginated_response, success_response
 
 router = APIRouter(prefix="/api/orders", tags=["Orders"])
 
@@ -49,8 +49,8 @@ def create_order(req: CreateOrderRequest, user: dict = Depends(require_role(["pr
         "store_name": store["name"], "items": order_items, "total_value": total_value,
         "points_earned": points_earned, "status": "enviado",
         "vendedor_ruby_id": store.get("vendedor_ruby_id"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
     orders_db.append(order)
     user["points"] = user.get("points", 0) + points_earned
@@ -75,9 +75,9 @@ def list_orders(
     user: dict = Depends(require_auth),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    status: str | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "desc",
 ):
     if user["role"] == "admin":
@@ -116,7 +116,7 @@ def update_order_status(order_id: str, status: str, user: dict = Depends(require
     for o in orders_db:
         if o["id"] == order_id:
             o["status"] = status
-            o["updated_at"] = datetime.now(timezone.utc).isoformat()
+            o["updated_at"] = datetime.now(UTC).isoformat()
             log_activity(user["id"], user["name"], "order_status", f"Pedido {order_id} -> {status}", module="orders")
             return success_response(data={"order": o}, message=f"Status atualizado para {status}")
     raise HTTPException(status_code=404, detail="Pedido nao encontrado")

@@ -9,13 +9,14 @@ Future migration path:
 
 import os
 import uuid
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from datetime import UTC, datetime
 
-from app.auth import require_auth, require_admin
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+
+from app.auth import require_admin, require_auth
 from app.database import admin_images_db
-from app.responses import success_response
 from app.logger import log_activity
+from app.responses import success_response
 from app.utils import ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE, UPLOAD_DIR
 
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
@@ -117,7 +118,7 @@ async def admin_upload_image(
         "product_name": product_name or None,
         "type": image_type,
         "size": len(content),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     admin_images_db.append(img_entry)
 
