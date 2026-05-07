@@ -49,6 +49,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.database import (
+    flush_all_to_db,
     hydrate_from_db,
     init_db_schema,
     save_store,
@@ -78,13 +79,17 @@ async def lifespan(_app: FastAPI):
     hydrate_from_db()
     if not users_db:
         seed_data()
-        # Persist the seed so the next boot reads from DB.
+        # Persist the full seed snapshot so the next boot reads from DB.
         for cnpj in list(stores_db):
             save_store(cnpj)
         for email in list(users_db):
             save_user(email)
+        flush_all_to_db()
     log_system_event("app_startup", "Ruby Rose B2B API v4.0 iniciada - Arquitetura modular")
     yield
+    # Graceful shutdown — snapshot every in-memory collection back to disk so
+    # admin mutations during the session aren't lost.
+    flush_all_to_db()
 
 
 app = FastAPI(

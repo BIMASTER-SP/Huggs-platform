@@ -1,18 +1,14 @@
 """
 ORM models for the persistent entities.
 
-Persistence scope (PR DB v1):
-  ✅ UserRow, StoreRow, OrderRow, LgpdConsentRow
+All in-memory dicts/lists in `app/database.py` are mirrored here. Routes still
+mutate the dicts (no rewrites needed); the `save_*` helpers in `app/database.py`
+upsert each row to disk. Boot-time `hydrate_from_db()` reverses the flow.
 
-Still in-memory (see `app/database.py`):
-  Banner, RewardKit, Redemption, Challenge, ChallengeSubmission, Receipt,
-  Webhook, ActivityLog, CompanySettings, CatalogProduct, AdminStock,
-  AdminImage, AdminIntegration, IntegrationStock/Catalog/Price/Promotion.
-
-Why JSON columns for `Order.items`?
-  Order line items are immutable once written and never queried in isolation
-  (the UI always loads the full order). Modeling them as a separate table
-  buys nothing here and complicates inserts.
+JSON columns for nested arrays (Order.items, RewardKit.items, Receipt.items,
+CompanySettings, CatalogProduct.raw, AdminStock.raw, etc.) are intentional —
+those payloads are atomic from the UI's perspective and never queried in
+isolation, so denormalization beats joining child tables here.
 """
 
 from datetime import UTC, datetime
@@ -101,3 +97,88 @@ class LgpdConsentRow(Base):
     consent_marketing: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_third_party: Mapped[bool] = mapped_column(Boolean, default=False)
     consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# ============================================================
+# Generic JSON-blob rows for entities the UI treats as opaque payloads.
+# Each has a string `id` PK + a JSON `data` field with the original dict shape.
+# ============================================================
+
+class _JsonRow(Base):
+    """Abstract base — concrete subclasses just set __tablename__."""
+    __abstract__ = True
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class BannerRow(_JsonRow):
+    __tablename__ = "banners"
+
+
+class RewardKitRow(_JsonRow):
+    __tablename__ = "reward_kits"
+
+
+class RedemptionRow(_JsonRow):
+    __tablename__ = "redemptions"
+
+
+class ChallengeRow(_JsonRow):
+    __tablename__ = "challenges"
+
+
+class ChallengeSubmissionRow(_JsonRow):
+    __tablename__ = "challenge_submissions"
+
+
+class ReceiptRow(_JsonRow):
+    __tablename__ = "receipts"
+
+
+class WebhookRow(_JsonRow):
+    __tablename__ = "webhooks"
+
+
+class ActivityLogRow(_JsonRow):
+    __tablename__ = "activity_logs"
+
+
+class CatalogProductRow(_JsonRow):
+    __tablename__ = "catalog_products"
+
+
+class AdminStockRow(_JsonRow):
+    __tablename__ = "admin_stock"
+
+
+class AdminImageRow(_JsonRow):
+    __tablename__ = "admin_images"
+
+
+class AdminIntegrationRow(_JsonRow):
+    __tablename__ = "admin_integrations"
+
+
+class IntegrationStockRow(_JsonRow):
+    __tablename__ = "integration_stock"
+
+
+class IntegrationCatalogRow(_JsonRow):
+    __tablename__ = "integration_catalog"
+
+
+class IntegrationPriceRow(_JsonRow):
+    __tablename__ = "integration_prices"
+
+
+class IntegrationPromotionRow(_JsonRow):
+    __tablename__ = "integration_promotions"
+
+
+class CompanySettingsRow(Base):
+    """Singleton — a single row keyed by 'singleton'."""
+    __tablename__ = "company_settings"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default="singleton")
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

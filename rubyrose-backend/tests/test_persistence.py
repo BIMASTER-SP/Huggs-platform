@@ -77,6 +77,22 @@ def test_lgpd_consent_persists(client, auth_headers):
     assert consent["consent_data_collection"] is True
 
 
+def test_flush_and_hydrate_round_trip(client):
+    """flush_all_to_db() should persist every in-memory collection so a clean
+    hydrate brings them back identical (modulo dict-to-list ordering)."""
+    # Mutate something in an admin collection.
+    database.banners_db.append({"id": "banner-test", "title": "test", "subtitle": "x", "active": True, "position": 99})
+    database.flush_all_to_db()
+
+    # Wipe everything, hydrate from disk, verify the test banner is back.
+    for store_name in ("banners_db", "users_db", "stores_db", "orders_db", "lgpd_consents_db"):
+        getattr(database, store_name).clear()
+    database.hydrate_from_db()
+
+    titles = [b.get("title") for b in database.banners_db]
+    assert "test" in titles
+
+
 def test_account_deletion_persists(client, auth_headers):
     res = client.delete("/api/lgpd/data", headers=auth_headers)
     assert res.status_code == 200

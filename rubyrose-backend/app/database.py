@@ -17,7 +17,30 @@ import bcrypt
 from sqlalchemy import select
 
 from app.db import Base, SessionLocal, engine
-from app.db_models import LgpdConsentRow, OrderRow, StoreRow, UserRow
+from app.db_models import (
+    ActivityLogRow,
+    AdminImageRow,
+    AdminIntegrationRow,
+    AdminStockRow,
+    BannerRow,
+    CatalogProductRow,
+    ChallengeRow,
+    ChallengeSubmissionRow,
+    CompanySettingsRow,
+    IntegrationCatalogRow,
+    IntegrationPriceRow,
+    IntegrationPromotionRow,
+    IntegrationStockRow,
+    LgpdConsentRow,
+    OrderRow,
+    RedemptionRow,
+    ReceiptRow,
+    RewardKitRow,
+    StoreRow,
+    UserRow,
+    WebhookRow,
+    _JsonRow,
+)
 
 # ============================================================
 # IN-MEMORY DATA STORES
@@ -244,6 +267,27 @@ def _order_dict_from_row(row: OrderRow) -> dict:
     }
 
 
+_LIST_COLLECTIONS: dict[str, type[_JsonRow]] = {
+    # in-memory list name → JSON-row model
+    "challenges_db": ChallengeRow,
+    "challenge_submissions_db": ChallengeSubmissionRow,
+    "receipts_db": ReceiptRow,
+    "banners_db": BannerRow,
+    "reward_kits_db": RewardKitRow,
+    "redemptions_db": RedemptionRow,
+    "webhooks_db": WebhookRow,
+    "integrations_stock_db": IntegrationStockRow,
+    "integrations_catalog_db": IntegrationCatalogRow,
+    "integrations_prices_db": IntegrationPriceRow,
+    "integrations_promotions_db": IntegrationPromotionRow,
+    "admin_stock_db": AdminStockRow,
+    "admin_images_db": AdminImageRow,
+    "admin_integrations_db": AdminIntegrationRow,
+    "activity_logs_db": ActivityLogRow,
+    "CATALOG_PRODUCTS": CatalogProductRow,
+}
+
+
 def hydrate_from_db() -> None:
     """Fill in-memory dicts/lists with whatever is on disk. Called once at startup."""
     with SessionLocal() as s:
@@ -260,6 +304,59 @@ def hydrate_from_db() -> None:
                 "consent_third_party": row.consent_third_party,
                 "consented_at": row.consented_at.isoformat() if row.consented_at else None,
             }
+
+        # Generic JSON-row collections
+        target_globals = globals()
+        for name, model in _LIST_COLLECTIONS.items():
+            target_list = target_globals[name]
+            for row in s.execute(select(model)).scalars():
+                target_list.append(row.data)
+
+        # Singleton CompanySettings
+        cs = s.get(CompanySettingsRow, "singleton")
+        if cs and cs.data:
+            company_settings_db.update(cs.data)
+
+
+def flush_all_to_db() -> None:
+    """Wipe-and-reinsert every in-memory store to its DB table.
+
+    Used at app shutdown and explicitly by routes (or admin actions) when
+    the cost of writing every entity is preferable to threading per-record
+    save calls through 30+ admin endpoints.
+    """
+    target_globals = globals()
+    with SessionLocal() as s:
+        # JSON collections — wipe + reinsert. De-dupe by computed id so
+        # collections that intentionally hold near-duplicates (activity log
+        # rows hashed by minute, etc.) don't violate the PK constraint.
+        for name, model in _LIST_COLLECTIONS.items():
+            s.query(model).delete()
+            seen: set[str] = set()
+            for idx, item in enumerate(target_globals[name]):
+                rid = str(item.get("id") or item.get("ean") or item.get("user_email") or f"{name}-{idx}")
+                # If two items share the same id, suffix the index to keep both rows.
+                if rid in seen:
+                    rid = f"{rid}-dup{idx}"
+                seen.add(rid)
+                s.add(model(id=rid, data=item))
+
+        # CompanySettings singleton
+        s.query(CompanySettingsRow).delete()
+        s.add(CompanySettingsRow(id="singleton", data=dict(company_settings_db)))
+
+        s.commit()
+
+    # Critical entities still go through their typed save_* (already called by routes)
+    for cnpj in list(stores_db):
+        save_store(cnpj)
+    for email in list(users_db):
+        save_user(email)
+    with SessionLocal() as s:
+        s.query(OrderRow).delete()
+        s.commit()
+    for order in orders_db:
+        save_order(order)
 
 
 def save_user(email: str) -> None:
