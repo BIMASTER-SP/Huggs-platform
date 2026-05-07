@@ -35,21 +35,22 @@ Migration path to AWS:
   5. Deploy via ECS/Fargate or Lambda + API Gateway
 """
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 import os
 import time
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from app.config import settings
 from app.database import seed_data
-from app.rate_limit import limiter
-from app.responses import success_response, error_response
 from app.logger import get_logger, log_system_event
+from app.rate_limit import limiter
+from app.responses import error_response, success_response
 
 # ============================================================
 # APP SETUP
@@ -115,18 +116,18 @@ async def general_exception_handler(request: Request, exc: Exception):
 # ============================================================
 # REGISTER ALL ROUTERS
 # ============================================================
-from app.routes.auth_routes import router as auth_router
-from app.routes.catalog_routes import router as catalog_router
-from app.routes.order_routes import router as order_router
-from app.routes.challenge_routes import router as challenge_router
-from app.routes.reward_routes import router as reward_router
-from app.routes.receipt_routes import router as receipt_router
-from app.routes.store_routes import router as store_router
-from app.routes.banner_routes import router as banner_router
-from app.routes.lgpd_routes import router as lgpd_router
-from app.routes.integration_routes import router as integration_router
-from app.routes.dashboard_routes import router as dashboard_router
 from app.routes.admin_routes import router as admin_router
+from app.routes.auth_routes import router as auth_router
+from app.routes.banner_routes import router as banner_router
+from app.routes.catalog_routes import router as catalog_router
+from app.routes.challenge_routes import router as challenge_router
+from app.routes.dashboard_routes import router as dashboard_router
+from app.routes.integration_routes import router as integration_router
+from app.routes.lgpd_routes import router as lgpd_router
+from app.routes.order_routes import router as order_router
+from app.routes.receipt_routes import router as receipt_router
+from app.routes.reward_routes import router as reward_router
+from app.routes.store_routes import router as store_router
 from app.routes.upload_routes import router as upload_router
 
 app.include_router(auth_router)

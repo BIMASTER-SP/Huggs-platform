@@ -1,11 +1,12 @@
 """Reward Routes - Kits, redemptions, history"""
 
-from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_auth
-from app.database import reward_kits_db, redemptions_db
+from app.database import redemptions_db, reward_kits_db
 from app.models import RedeemKitRequest
 from app.responses import success_response
 
@@ -35,7 +36,7 @@ def redeem_kit(req: RedeemKitRequest, user: dict = Depends(require_auth)):
         "id": redemption_id, "user_id": user["id"], "kit_id": kit["id"],
         "kit_name": kit["name"], "points_spent": kit["points_cost"],
         "shipping_address": req.shipping_address or "Endereco da loja vinculada",
-        "status": "processando", "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "processando", "created_at": datetime.now(UTC).isoformat(),
     }
     redemptions_db.append(redemption)
     return success_response(

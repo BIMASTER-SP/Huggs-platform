@@ -9,8 +9,8 @@ Future migration path:
   - Use Pydantic's orm_mode for automatic serialization
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional
+
+from pydantic import BaseModel
 
 
 # ============================================================
@@ -20,9 +20,9 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
-    cpf: Optional[str] = None
-    phone: Optional[str] = None
-    store_cnpj: Optional[str] = None
+    cpf: str | None = None
+    phone: str | None = None
+    store_cnpj: str | None = None
     role: str = "promotora"
 
 
@@ -48,16 +48,16 @@ class CreateOrderRequest(BaseModel):
 # ============================================================
 class ChallengeSubmissionRequest(BaseModel):
     challenge_id: str
-    photo_url: Optional[str] = None
-    photo_base64: Optional[str] = None
-    notes: Optional[str] = None
+    photo_url: str | None = None
+    photo_base64: str | None = None
+    notes: str | None = None
 
 
 class ChallengeCreateRequest(BaseModel):
     title: str
     description: str
     type: str
-    reward_kit_id: Optional[str] = None
+    reward_kit_id: str | None = None
     points_reward: int = 100
     goal: int = 1
     start_date: str
@@ -80,7 +80,7 @@ class QRCodeScanRequest(BaseModel):
 # ============================================================
 class RedeemKitRequest(BaseModel):
     kit_id: str
-    shipping_address: Optional[str] = None
+    shipping_address: str | None = None
 
 
 # ============================================================
@@ -88,28 +88,28 @@ class RedeemKitRequest(BaseModel):
 # ============================================================
 class BannerCreateRequest(BaseModel):
     title: str
-    subtitle: Optional[str] = None
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-    color: Optional[str] = "purple"
+    subtitle: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    color: str | None = "purple"
     highlight: bool = False
     position: int = 1
     active: bool = True
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    start_date: str | None = None
+    end_date: str | None = None
 
 
 class BannerUpdateRequest(BaseModel):
-    title: Optional[str] = None
-    subtitle: Optional[str] = None
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-    color: Optional[str] = None
-    highlight: Optional[bool] = None
-    position: Optional[int] = None
-    active: Optional[bool] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    title: str | None = None
+    subtitle: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    color: str | None = None
+    highlight: bool | None = None
+    position: int | None = None
+    active: bool | None = None
+    start_date: str | None = None
+    end_date: str | None = None
 
 
 # ============================================================
@@ -118,7 +118,7 @@ class BannerUpdateRequest(BaseModel):
 class StockUpdateRequest(BaseModel):
     product_ean: str
     quantity: int
-    warehouse: Optional[str] = "principal"
+    warehouse: str | None = "principal"
 
 
 class CatalogItemRequest(BaseModel):
@@ -127,22 +127,22 @@ class CatalogItemRequest(BaseModel):
     category: str
     brand: str
     price: float
-    description: Optional[str] = None
-    image_url: Optional[str] = None
+    description: str | None = None
+    image_url: str | None = None
 
 
 class PriceUpdateRequest(BaseModel):
     product_id: int
     new_price: float
-    effective_date: Optional[str] = None
+    effective_date: str | None = None
 
 
 class PromotionRequest(BaseModel):
     name: str
-    description: Optional[str] = None
-    discount_percent: Optional[float] = None
-    bonus_points: Optional[float] = None
-    product_ids: Optional[list[int]] = None
+    description: str | None = None
+    discount_percent: float | None = None
+    bonus_points: float | None = None
+    product_ids: list[int] | None = None
     start_date: str
     end_date: str
     active: bool = True
@@ -151,8 +151,8 @@ class PromotionRequest(BaseModel):
 class WebhookRegisterRequest(BaseModel):
     url: str
     events: list[str]
-    secret: Optional[str] = None
-    description: Optional[str] = None
+    secret: str | None = None
+    description: str | None = None
 
 
 # ============================================================
@@ -168,38 +168,38 @@ class LGPDConsentRequest(BaseModel):
 # ADMIN MODELS
 # ============================================================
 class CompanySettingsUpdate(BaseModel):
-    name: Optional[str] = None
-    logo_url: Optional[str] = None
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
-    website: Optional[str] = None
-    cnpj: Optional[str] = None
-    address: Optional[str] = None
-    about: Optional[str] = None
+    name: str | None = None
+    logo_url: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    website: str | None = None
+    cnpj: str | None = None
+    address: str | None = None
+    about: str | None = None
 
 
 class AdminProductRequest(BaseModel):
     name: str
-    ean: Optional[str] = None
+    ean: str | None = None
     price: float
     category: str
-    description: Optional[str] = None
+    description: str | None = None
     min_order: int = 1
-    image: Optional[str] = None
+    image: str | None = None
     stock_available: bool = True
 
 
 class AdminProductUpdate(BaseModel):
-    name: Optional[str] = None
-    ean: Optional[str] = None
-    price: Optional[float] = None
-    category: Optional[str] = None
-    description: Optional[str] = None
-    min_order: Optional[int] = None
-    image: Optional[str] = None
-    stock_available: Optional[bool] = None
+    name: str | None = None
+    ean: str | None = None
+    price: float | None = None
+    category: str | None = None
+    description: str | None = None
+    min_order: int | None = None
+    image: str | None = None
+    stock_available: bool | None = None
 
 
 class AdminCreateUserRequest(BaseModel):
@@ -207,34 +207,34 @@ class AdminCreateUserRequest(BaseModel):
     email: str
     password: str
     role: str = "promotora"
-    cpf: Optional[str] = None
-    phone: Optional[str] = None
-    store_cnpj: Optional[str] = None
+    cpf: str | None = None
+    phone: str | None = None
+    store_cnpj: str | None = None
     status: str = "active"
 
 
 class AdminEditUserRequest(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    role: Optional[str] = None
-    status: Optional[str] = None
-    store_cnpj: Optional[str] = None
+    name: str | None = None
+    phone: str | None = None
+    role: str | None = None
+    status: str | None = None
+    store_cnpj: str | None = None
 
 
 class AdminStoreRequest(BaseModel):
     cnpj: str
     name: str
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    phone: Optional[str] = None
-    vendedor_ruby_id: Optional[str] = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    phone: str | None = None
+    vendedor_ruby_id: str | None = None
 
 
 class AdminStockUpdateRequest(BaseModel):
-    product_id: Optional[int] = None
-    product_name: Optional[str] = None
-    ean: Optional[str] = None
+    product_id: int | None = None
+    product_name: str | None = None
+    ean: str | None = None
     quantity: int
     low_stock_alert: int = 10
     warehouse: str = "SP Principal"
@@ -243,8 +243,8 @@ class AdminStockUpdateRequest(BaseModel):
 class AdminImageRequest(BaseModel):
     name: str
     url: str
-    product_id: Optional[int] = None
-    product_name: Optional[str] = None
+    product_id: int | None = None
+    product_name: str | None = None
     type: str = "produto"
 
 

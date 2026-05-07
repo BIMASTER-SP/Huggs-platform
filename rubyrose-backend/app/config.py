@@ -8,8 +8,9 @@ or invalid, instead of silently using insecure defaults.
 """
 
 from typing import Annotated
+
 from pydantic import BeforeValidator, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def _csv_to_list(value):
@@ -18,7 +19,9 @@ def _csv_to_list(value):
     return value
 
 
-CSVList = Annotated[list[str], BeforeValidator(_csv_to_list)]
+# `NoDecode` keeps pydantic-settings from trying to parse the env var as JSON
+# (which breaks for plain CSV input). Our `BeforeValidator` then handles the split.
+CSVList = Annotated[list[str], NoDecode, BeforeValidator(_csv_to_list)]
 
 
 class Settings(BaseSettings):

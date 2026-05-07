@@ -9,11 +9,10 @@ Future migration path:
   - Add email/notification helpers (SES)
 """
 
-import re
 import random
+import re
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from app.database import RUBY_ROSE_PRODUCTS_EAN, receipts_db
 
@@ -44,13 +43,13 @@ def simulate_nfe_lookup(access_key: str) -> dict:
     city = random.choice(["Sao Paulo", "Rio de Janeiro", "Belo Horizonte", "Curitiba"])
     return {
         "access_key": clean_key, "store_name": store, "store_cnpj": "12345678000190",
-        "city": city, "date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+        "city": city, "date": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"),
         "items": items, "total_value": total_value, "total_points": total_points,
         "ruby_rose_items_count": len(items),
     }
 
 
-def process_nfe(nfe_data: dict, user: Optional[dict] = None) -> dict:
+def process_nfe(nfe_data: dict, user: dict | None = None) -> dict:
     """Process a scanned NFe receipt and store it."""
     receipt_id = f"receipt-{uuid.uuid4().hex[:8]}"
     receipt = {
@@ -60,7 +59,7 @@ def process_nfe(nfe_data: dict, user: Optional[dict] = None) -> dict:
         "total_value": nfe_data["total_value"], "total_points": nfe_data["total_points"],
         "ruby_rose_items": nfe_data["ruby_rose_items_count"], "items": nfe_data["items"],
         "user_id": user["id"] if user else None, "status": "processado",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     receipts_db.append(receipt)
     if user:

@@ -15,6 +15,29 @@ bcrypt = "^5.0.0"
 pydantic-settings = "^2.6.1"
 slowapi = "^0.1.9"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.24.0"
+httpx = "^0.28.1"
+ruff = "^0.8.4"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra -q"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+# E501 long lines — handled by formatter where possible.
+# B008 default arg in function call — required by FastAPI's Depends() pattern.
+# E402 module-level import not at top — intentional in main.py to sequence
+#   middleware before route imports.
+ignore = ["E501", "B008", "E402"]
 
 [build-system]
 requires = ["poetry-core"]

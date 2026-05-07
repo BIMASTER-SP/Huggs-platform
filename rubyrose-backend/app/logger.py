@@ -10,11 +10,10 @@ Future migration path:
   - Integrate with AWS X-Ray for distributed tracing
 """
 
-import logging
 import json
-from datetime import datetime, timezone
-from typing import Optional
+import logging
 import uuid
+from datetime import UTC, datetime
 
 from app.database import activity_logs_db
 
@@ -27,7 +26,7 @@ class StructuredFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -90,7 +89,7 @@ def log_activity(
         "details": details,
         "level": level,
         "module": module,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     activity_logs_db.append(log_entry)
 

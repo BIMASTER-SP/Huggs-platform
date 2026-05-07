@@ -1,25 +1,38 @@
 """Admin Routes - User, product, store, order, stock, image, integration management with pagination"""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
+
 import bcrypt
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_admin, safe_user_response
 from app.database import (
-    users_db, stores_db, orders_db, CATALOG_PRODUCTS,
-    admin_stock_db, admin_images_db, admin_integrations_db,
-    activity_logs_db, company_settings_db, challenges_db,
+    CATALOG_PRODUCTS,
+    activity_logs_db,
+    admin_images_db,
+    admin_integrations_db,
+    admin_stock_db,
+    challenges_db,
+    company_settings_db,
+    orders_db,
+    stores_db,
+    users_db,
 )
-from app.models import (
-    CompanySettingsUpdate, AdminProductRequest, AdminProductUpdate,
-    AdminCreateUserRequest, AdminEditUserRequest, AdminStoreRequest,
-    AdminStockUpdateRequest, AdminImageRequest, AdminIntegrationRequest,
-    ChallengeCreateRequest,
-)
-from app.responses import success_response, paginated_response, apply_pagination
 from app.logger import log_activity
+from app.models import (
+    AdminCreateUserRequest,
+    AdminEditUserRequest,
+    AdminImageRequest,
+    AdminIntegrationRequest,
+    AdminProductRequest,
+    AdminProductUpdate,
+    AdminStockUpdateRequest,
+    AdminStoreRequest,
+    ChallengeCreateRequest,
+    CompanySettingsUpdate,
+)
+from app.responses import apply_pagination, paginated_response, success_response
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -36,7 +49,7 @@ def get_company_settings(user: dict = Depends(require_admin)):
 def update_company_settings(req: CompanySettingsUpdate, user: dict = Depends(require_admin)):
     for field, value in req.model_dump(exclude_none=True).items():
         company_settings_db[field] = value
-    company_settings_db["updated_at"] = datetime.now(timezone.utc).isoformat()
+    company_settings_db["updated_at"] = datetime.now(UTC).isoformat()
     log_activity(user["id"], user["name"], "company_update", "Configuracoes da empresa atualizadas")
     return success_response(data={"settings": company_settings_db}, message="Configuracoes atualizadas com sucesso")
 
@@ -49,10 +62,10 @@ def list_users(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    role: Optional[str] = None,
-    status: Optional[str] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    role: str | None = None,
+    status: str | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "asc",
 ):
     all_users = [safe_user_response(u) for u in users_db.values()]
@@ -85,7 +98,7 @@ def admin_create_user(req: AdminCreateUserRequest, user: dict = Depends(require_
         "status": req.status, "store_cnpj": req.store_cnpj, "points": 0,
         "level": "Bronze", "total_orders": 0, "total_order_value": 0.0,
         "challenges_completed": 0, "receipts_count": 0,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "lgpd_consent": False, "lgpd_consent_date": None,
     }
     users_db[req.email] = new_user
@@ -149,9 +162,9 @@ def admin_list_products(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    category: Optional[str] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    category: str | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "asc",
 ):
     filters = {}
@@ -223,7 +236,7 @@ def admin_create_store(req: AdminStoreRequest, user: dict = Depends(require_admi
         "cnpj": req.cnpj, "name": req.name, "address": req.address or "",
         "city": req.city or "", "state": req.state or "",
         "phone": req.phone or "", "vendedor_ruby_id": req.vendedor_ruby_id,
-        "status": "active", "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "active", "created_at": datetime.now(UTC).isoformat(),
     }
     stores_db[req.cnpj] = store
     log_activity(user["id"], user["name"], "store_create", f"Loja criada: {req.name}")
@@ -238,9 +251,9 @@ def admin_list_orders(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    status: str | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "desc",
 ):
     filters = {}
@@ -273,8 +286,8 @@ def get_activity_logs(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 50,
-    search: Optional[str] = None,
-    action: Optional[str] = None,
+    search: str | None = None,
+    action: str | None = None,
     sort_dir: str = "desc",
 ):
     filters = {}
@@ -297,9 +310,9 @@ def admin_list_stock(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    warehouse: Optional[str] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    warehouse: str | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "asc",
 ):
     filters = {}
@@ -323,7 +336,7 @@ def admin_create_stock(req: AdminStockUpdateRequest, user: dict = Depends(requir
         "id": f"stock-{uuid.uuid4().hex[:8]}", "product_id": req.product_id,
         "product_name": req.product_name or "", "ean": req.ean or "",
         "quantity": req.quantity, "low_stock_alert": req.low_stock_alert,
-        "warehouse": req.warehouse, "last_updated": datetime.now(timezone.utc).isoformat(),
+        "warehouse": req.warehouse, "last_updated": datetime.now(UTC).isoformat(),
     }
     admin_stock_db.append(entry)
     log_activity(user["id"], user["name"], "stock_create", f"Estoque criado: {req.product_name}")
@@ -339,7 +352,7 @@ def admin_update_stock(stock_id: str, req: AdminStockUpdateRequest, user: dict =
             s["warehouse"] = req.warehouse
             if req.product_name:
                 s["product_name"] = req.product_name
-            s["last_updated"] = datetime.now(timezone.utc).isoformat()
+            s["last_updated"] = datetime.now(UTC).isoformat()
             log_activity(user["id"], user["name"], "stock_update", f"Estoque atualizado: {s['product_name']} -> {req.quantity}")
             return success_response(data={"entry": s}, message="Estoque atualizado")
     raise HTTPException(status_code=404, detail="Registro de estoque nao encontrado")
@@ -363,9 +376,9 @@ def admin_list_images(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    type_filter: Optional[str] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    type_filter: str | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "desc",
 ):
     filters = {}
@@ -385,7 +398,7 @@ def admin_create_image(req: AdminImageRequest, user: dict = Depends(require_admi
     img = {
         "id": f"img-{uuid.uuid4().hex[:8]}", "name": req.name, "url": req.url,
         "product_id": req.product_id, "product_name": req.product_name,
-        "type": req.type, "size": 0, "created_at": datetime.now(timezone.utc).isoformat(),
+        "type": req.type, "size": 0, "created_at": datetime.now(UTC).isoformat(),
     }
     admin_images_db.append(img)
     log_activity(user["id"], user["name"], "image_create", f"Imagem adicionada: {req.name}")
@@ -424,7 +437,7 @@ def admin_list_integrations(
     user: dict = Depends(require_admin),
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
+    search: str | None = None,
 ):
     safe_list = []
     for ig in admin_integrations_db:
@@ -450,7 +463,7 @@ def admin_create_integration(req: AdminIntegrationRequest, user: dict = Depends(
         "api_url": req.api_url, "api_key": req.api_key,
         "description": req.description, "active": req.active,
         "status": "connected" if req.active else "disconnected",
-        "last_sync": datetime.now(timezone.utc).isoformat() if req.active else None,
+        "last_sync": datetime.now(UTC).isoformat() if req.active else None,
     }
     admin_integrations_db.append(ig)
     log_activity(user["id"], user["name"], "integration_create", f"Integracao criada: {req.name}")
@@ -470,7 +483,7 @@ def admin_update_integration(integration_id: str, req: AdminIntegrationRequest, 
             ig["active"] = req.active
             ig["status"] = "connected" if req.active else "disconnected"
             if req.active:
-                ig["last_sync"] = datetime.now(timezone.utc).isoformat()
+                ig["last_sync"] = datetime.now(UTC).isoformat()
             log_activity(user["id"], user["name"], "integration_update", f"Integracao atualizada: {req.name}")
             return success_response(data={"integration": ig}, message="Integracao atualizada")
     raise HTTPException(status_code=404, detail="Integracao nao encontrada")
@@ -483,7 +496,7 @@ def admin_toggle_integration(integration_id: str, user: dict = Depends(require_a
             ig["active"] = not ig["active"]
             ig["status"] = "connected" if ig["active"] else "disconnected"
             if ig["active"]:
-                ig["last_sync"] = datetime.now(timezone.utc).isoformat()
+                ig["last_sync"] = datetime.now(UTC).isoformat()
             st = "ativada" if ig["active"] else "desativada"
             log_activity(user["id"], user["name"], "integration_toggle", f"Integracao {st}: {ig['name']}")
             return success_response(data={"integration": ig}, message=f"Integracao {st}")

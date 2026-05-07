@@ -1,21 +1,21 @@
 """Catalog Routes - Product catalog with pagination, search, filters"""
 
-from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 
 from app.database import CATALOG_PRODUCTS
-from app.responses import success_response, paginated_response, apply_pagination
+from app.responses import apply_pagination, paginated_response, success_response
 
 router = APIRouter(prefix="/api/catalog", tags=["Catalog"])
 
 
 @router.get("")
 def get_catalog(
-    category: Optional[str] = None,
-    search: Optional[str] = None,
+    category: str | None = None,
+    search: str | None = None,
     page: int = 1,
     per_page: int = 20,
-    sort_by: Optional[str] = None,
+    sort_by: str | None = None,
     sort_dir: str = "asc",
 ):
     filters = {}

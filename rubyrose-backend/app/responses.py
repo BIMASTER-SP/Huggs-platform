@@ -14,7 +14,7 @@ Future migration path:
   - Add HATEOAS links for API discoverability
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 def success_response(
@@ -70,11 +70,11 @@ def apply_pagination(
     items: list,
     page: int = 1,
     per_page: int = 20,
-    search: Optional[str] = None,
-    search_fields: Optional[list[str]] = None,
-    sort_by: Optional[str] = None,
+    search: str | None = None,
+    search_fields: list[str] | None = None,
+    sort_by: str | None = None,
     sort_dir: str = "asc",
-    filters: Optional[dict] = None,
+    filters: dict | None = None,
 ) -> tuple[list, int]:
     """
     Apply search, filters, sorting, and pagination to a list of items.

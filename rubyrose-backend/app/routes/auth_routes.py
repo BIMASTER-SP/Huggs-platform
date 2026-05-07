@@ -1,18 +1,18 @@
 """Auth Routes - Registration, Login, Profile"""
 
-from fastapi import APIRouter, Depends, Request
-from fastapi import HTTPException
-import bcrypt
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import create_token, require_auth, safe_user_response
 from app.config import settings
-from app.database import users_db, stores_db
-from app.models import RegisterRequest, LoginRequest
+from app.database import stores_db, users_db
+from app.logger import log_activity
+from app.models import LoginRequest, RegisterRequest
 from app.rate_limit import limiter
 from app.responses import success_response
-from app.logger import log_activity
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -36,7 +36,7 @@ def register(request: Request, req: RegisterRequest):
         "status": "pendente", "store_cnpj": req.store_cnpj, "points": 0,
         "level": "Bronze", "total_orders": 0, "total_order_value": 0.0,
         "challenges_completed": 0, "receipts_count": 0,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "lgpd_consent": False, "lgpd_consent_date": None,
     }
     users_db[req.email] = user

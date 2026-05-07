@@ -1,14 +1,20 @@
 """Dashboard Routes - User dashboard and admin dashboard with chart data"""
 
-from typing import Optional
 from fastapi import APIRouter, Depends
-from datetime import datetime, timezone
 
-from app.auth import require_auth, require_admin, safe_user_response
+from app.auth import require_admin, require_auth, safe_user_response
 from app.database import (
-    users_db, stores_db, orders_db, challenges_db, challenge_submissions_db,
-    banners_db, redemptions_db, CATALOG_PRODUCTS,
-    admin_stock_db, admin_images_db, admin_integrations_db, activity_logs_db,
+    CATALOG_PRODUCTS,
+    admin_images_db,
+    admin_integrations_db,
+    admin_stock_db,
+    banners_db,
+    challenge_submissions_db,
+    challenges_db,
+    orders_db,
+    redemptions_db,
+    stores_db,
+    users_db,
 )
 from app.responses import success_response
 
@@ -64,7 +70,6 @@ def get_admin_stats(user: dict = Depends(require_admin)):
         orders_by_status[s] = orders_by_status.get(s, 0) + 1
 
     # Chart data: sales by period (last 6 months simulated)
-    months = ["Out", "Nov", "Dez", "Jan", "Fev", "Mar"]
     sales_by_period = [
         {"month": "Out", "vendas": 8500, "pedidos": 12},
         {"month": "Nov", "vendas": 12300, "pedidos": 18},
