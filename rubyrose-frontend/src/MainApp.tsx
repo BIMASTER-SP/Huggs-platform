@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
-import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, AlertCircle, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
+import { Search, Home, ShoppingCart, Package, Trophy, User, ChevronRight, Gift, Camera, X, Check, ShoppingBag, Sparkles, Plus, Minus, MapPin, CheckCircle, Truck, Award, Target, Send, FileText, Shield, Trash2, AlertTriangle, LogOut, Settings, Users, BarChart3, ToggleLeft, Save, Activity, BookOpen, ExternalLink, Image, Database, Link2, Menu, Upload, Wifi, WifiOff, ChevronLeft, TrendingUp, PieChart as PieChartIcon } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 
 const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -36,7 +36,7 @@ interface CartItem { product_id: number; name: string; price: number; quantity: 
 
 const CHART_COLORS = ['#BE185D', '#EC4899', '#F472B6', '#FB923C', '#A78BFA', '#34D399', '#60A5FA', '#FBBF24']
 
-function App() {
+function MainApp() {
   const [page, setPage] = useState<Page>('inicio')
   const [isLoggedIn, setIsLoggedIn] = useState(!!authToken)
   const [user, setUser] = useState<any>(null)
@@ -51,10 +51,6 @@ function App() {
   const [showCart, setShowCart] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentBanner, setCurrentBanner] = useState(0)
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
-  const [loginError, setLoginError] = useState('')
-  const [loginLoading, setLoginLoading] = useState(false)
   const [showOrderDetail, setShowOrderDetail] = useState<any>(null)
   const [showRewardKits, setShowRewardKits] = useState(false)
   const [showLGPD, setShowLGPD] = useState(false)
@@ -90,22 +86,23 @@ function App() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
   const unwrap = (resp: any) => resp.data !== undefined ? resp.data : resp
 
-  const doLogin = async () => {
-    setLoginLoading(true); setLoginError('')
-    try {
-      const loginHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (tunnelAuth) loginHeaders['Authorization'] = `Basic ${tunnelAuth}`
-      const res = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: loginHeaders as HeadersInit, body: JSON.stringify({ email: loginEmail, password: loginPassword }) })
-      const resp = await res.json()
-      if (!res.ok) throw new Error(resp.message || resp.detail || 'Erro no login')
-      const data = resp.data || resp
-      authToken = data.token; localStorage.setItem('auth_token', data.token); setUser(data.user); setIsLoggedIn(true)
-      if (!localStorage.getItem('lgpd_consent_b2b')) setShowLGPD(true)
-    } catch (e: any) { setLoginError(e.message) }
-    setLoginLoading(false)
-  }
+  // Login is handled by /login (LoginPage). After successful login the user lands here
+  // and the LGPD banner is shown until they accept it once.
+  useEffect(() => {
+    if (isLoggedIn && !localStorage.getItem('lgpd_consent_b2b')) setShowLGPD(true)
+  }, [isLoggedIn])
 
-  const doLogout = () => { authToken = null; localStorage.removeItem('auth_token'); setIsLoggedIn(false); setUser(null); setDashboard(null); setCart([]); setOrders([]); setChallenges([]) }
+  const doLogout = () => {
+    authToken = null
+    localStorage.removeItem('auth_token')
+    setIsLoggedIn(false)
+    setUser(null)
+    setDashboard(null)
+    setCart([])
+    setOrders([])
+    setChallenges([])
+    window.location.assign('/login')
+  }
 
   const fetchDashboard = useCallback(async () => { if (!authToken) return; try { const res = await apiFetch('/api/dashboard'); const resp = await res.json(); const d = unwrap(resp); setDashboard(d); setUser(d.user) } catch { } }, [])
   const fetchCatalog = useCallback(async (cat?: string) => { try { const q = cat && cat !== 'Todas' ? `?category=${encodeURIComponent(cat)}` : ''; const res = await apiFetch(`/api/catalog${q}`); const resp = await res.json(); const d = unwrap(resp); setCatalog(Array.isArray(d) ? d : resp.data || []) } catch { } }, [])
@@ -192,23 +189,8 @@ function App() {
     </div>
   )
 
-  // ========== LOGIN PAGE ==========
-  if (!isLoggedIn) return (
-    <div className="app-container"><div className="main-scroll">
-      <div className="min-h-full flex flex-col justify-center px-6 py-12" style={{ background: 'linear-gradient(180deg, #BE185D 0%, #EC4899 50%, #FDF2F8 100%)' }}>
-        <div className="text-center mb-8"><div className="w-20 h-20 mx-auto rounded-full bg-white/20 flex items-center justify-center mb-4"><Sparkles className="w-10 h-10 text-white" /></div><h1 className="text-3xl font-bold text-white">Ruby Rose</h1><p className="text-white/80 text-sm mt-1">Plataforma B2B para Vendedoras</p></div>
-        <div className="bg-white rounded-3xl p-6 shadow-xl">
-          <h2 className="text-lg font-bold text-gray-800 mb-1">Entrar na conta</h2><p className="text-sm text-gray-500 mb-4">Use suas credenciais de vendedora</p>
-          {loginError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{loginError}</div>}
-          <input type="email" placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-3 focus:outline-none focus:border-pink-400" />
-          <input type="password" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && doLogin()} className="w-full py-3 px-4 bg-gray-50 rounded-xl text-sm border border-gray-200 mb-4 focus:outline-none focus:border-pink-400" />
-          <button onClick={doLogin} disabled={loginLoading} className="w-full py-3.5 bg-pink-600 text-white rounded-xl font-semibold text-sm hover:bg-pink-700 transition disabled:opacity-50">{loginLoading ? 'Entrando...' : 'Entrar'}</button>
-          <div className="mt-4 text-center"><p className="text-xs text-gray-400">Acesso restrito a vendedoras cadastradas</p></div>
-        </div>
-        <div className="mt-6 text-center"><p className="text-white/60 text-xs">Teste: ana@email.com / ana123</p></div>
-      </div>
-    </div></div>
-  )
+  // Login screen lives at /login (see App.tsx). MainApp is only rendered behind <ProtectedRoute>,
+  // so isLoggedIn is always true here; doLogout below redirects to /login.
 
   // ========== HOME / DASHBOARD PAGE ==========
   const HomePage = () => (
@@ -1277,4 +1259,4 @@ function App() {
   )
 }
 
-export default App
+export default MainApp
