@@ -38,6 +38,9 @@ class Settings(BaseSettings):
 
     allowed_origins: CSVList = Field(default_factory=lambda: ["http://localhost:5173"])
 
+    # NFe / cupom-fiscal provider — see app/services/nfe.py for impls.
+    nfe_provider: str = "mock"  # "mock" | "meliuz"
+
     log_level: str = "INFO"
 
     rate_limit_default: str = "100/minute"

@@ -37,6 +37,7 @@ Migration path to AWS:
 
 import os
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,10 +56,20 @@ from app.responses import error_response, success_response
 # ============================================================
 # APP SETUP
 # ============================================================
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Startup/shutdown hook — replaces the deprecated `@app.on_event`."""
+    seed_data()
+    log_system_event("app_startup", "Ruby Rose B2B API v4.0 iniciada - Arquitetura modular")
+    yield
+    # No teardown work yet; closing DB pools / flushing queues will go here.
+
+
 app = FastAPI(
     title="Ruby Rose B2B API",
     version="4.0.0",
     description="API profissional para plataforma B2B Ruby Rose - Arquitetura modular preparada para AWS.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -180,11 +191,4 @@ def root():
     )
 
 
-# ============================================================
-# STARTUP: Seed database
-# ============================================================
-@app.on_event("startup")
-def on_startup():
-    seed_data()
-    log_system_event("app_startup", "Ruby Rose B2B API v4.0 iniciada - Arquitetura modular")
-    logger.info("Application started with modular architecture")
+# Startup logic moved to the `lifespan` context manager at the top of this module.
