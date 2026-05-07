@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, Gift, LogOut, MapPin, Shield, Trash2, User } from 'lucide-react'
-import { api } from '@/lib/api'
+import { lgpdService } from '@/services'
 
 interface Props {
   user: any
@@ -29,13 +29,13 @@ export function PerfilPage({
   const openPrivacy = () => {
     setShowPrivacy(true)
     if (!privacyData) {
-      api.get('/api/lgpd/privacy-policy').then(setPrivacyData).catch(() => {})
+      lgpdService.privacyPolicy().then(setPrivacyData).catch(() => {})
     }
   }
 
   const exportData = async () => {
     try {
-      const data = await api.get('/api/lgpd/export')
+      const data = await lgpdService.exportData()
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')

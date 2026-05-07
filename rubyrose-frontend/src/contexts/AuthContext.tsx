@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, tokenStorage } from '@/lib/api'
+import { tokenStorage } from '@/lib/api'
+import { authService } from '@/services'
 import type { User } from '@/lib/types'
 
 interface AuthState {
@@ -13,11 +14,6 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
 
-interface LoginResponse {
-  token: string
-  user: User
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -26,8 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (!tokenStorage.get()) return
     try {
-      const me = await api.get<User>('/api/auth/me')
-      setUser(me)
+      setUser(await authService.me())
     } catch {
       tokenStorage.clear()
       setUser(null)
@@ -38,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true)
     try {
-      const data = await api.post<LoginResponse>('/api/auth/login', { email, password })
+      const data = await authService.login(email, password)
       tokenStorage.set(data.token)
       setUser(data.user)
       setHasToken(true)

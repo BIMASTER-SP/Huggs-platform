@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rubyrose
+      POSTGRES_PASSWORD: rubyrose
+      POSTGRES_DB: rubyrose
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rubyrose"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./rubyrose-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env or environment}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173}
+      DATABASE_URL: postgresql+psycopg://rubyrose:rubyrose@postgres:5432/rubyrose
+      LOG_LEVEL: INFO
+      RATE_LIMIT_DEFAULT: 100/minute
+      RATE_LIMIT_LOGIN: 5/minute
+      RATE_LIMIT_REGISTER: 3/hour
+      RATE_LIMIT_CUPOM_LOOKUP: 10/minute
+      NFE_PROVIDER: mock
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./rubyrose-frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres-data:
+  backend-uploads:
