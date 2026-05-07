@@ -7,10 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth import require_auth, safe_user_response
 from app.database import (
     challenge_submissions_db,
+    delete_user_by_email,
     lgpd_consents_db,
     orders_db,
     receipts_db,
     redemptions_db,
+    save_lgpd_consent,
+    save_user,
     stores_db,
     users_db,
 )
@@ -41,15 +44,19 @@ def get_privacy_policy():
 
 @router.post("/consent")
 def submit_consent(req: LGPDConsentRequest, user: dict = Depends(require_auth)):
-    lgpd_consents_db[user["email"]] = {
+    consent_payload = {
         "user_id": user["id"], "email": user["email"],
         "consent_data_collection": req.consent_data_collection,
         "consent_marketing": req.consent_marketing,
         "consent_third_party": req.consent_third_party,
         "timestamp": datetime.now(UTC).isoformat(),
+        "consented_at": datetime.now(UTC).isoformat(),
     }
+    lgpd_consents_db[user["email"]] = consent_payload
+    save_lgpd_consent(user["email"], consent_payload)
     user["lgpd_consent"] = req.consent_data_collection
     user["lgpd_consent_date"] = datetime.now(UTC).isoformat()
+    save_user(user["email"])
     return success_response(message="Consentimento registrado com sucesso")
 
 
@@ -85,7 +92,7 @@ def delete_user_data(user: dict = Depends(require_auth)):
     user_id = user["id"]
     log_activity(user_id, user["name"], "lgpd_delete", f"Dados removidos: {email}", module="lgpd")
     if email in users_db:
-        del users_db[email]
+        delete_user_by_email(email)
     lgpd_consents_db.pop(email, None)
     # Remove user data from all collections
     for collection_ref in [orders_db, receipts_db, challenge_submissions_db, redemptions_db]:

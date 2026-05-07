@@ -1,19 +1,23 @@
 """
-Repository Layer - In-Memory Database
-=====================================
-All data access is centralized here following the Repository Pattern.
-When migrating to AWS RDS/DynamoDB, only this file needs to change.
-The rest of the application (services, routes) remains untouched.
+Repository Layer
+================
+Hybrid persistence: most stores remain in-memory dicts/lists for ergonomic
+mutation by routes, but four critical entities (users, stores, orders, LGPD
+consents) are mirrored to SQLAlchemy on every save and re-hydrated from disk
+at startup. The rest is documented as the next migration step.
 
-Future migration path:
-  - Replace dict/list stores with SQLAlchemy models + session
-  - Swap seed_data() with Alembic migrations
-  - Add connection pooling for RDS
+Migration path:
+  ✅ Done — UserRow, StoreRow, OrderRow, LgpdConsentRow persist via app.db_models
+  📝 Next — Banner, RewardKit, Receipt, Challenge*, Webhook, Activity, Admin*
 """
 
 from datetime import UTC, datetime
 
 import bcrypt
+from sqlalchemy import select
+
+from app.db import Base, SessionLocal, engine
+from app.db_models import LgpdConsentRow, OrderRow, StoreRow, UserRow
 
 # ============================================================
 # IN-MEMORY DATA STORES
@@ -194,3 +198,148 @@ def seed_data():
         {"id": "int-002", "name": "Correios API", "type": "logistica", "api_url": "https://api.correios.com.br/v2", "api_key": "cr-***...***xyz", "description": "Rastreamento de entregas via Correios", "active": True, "status": "connected", "last_sync": now},
         {"id": "int-003", "name": "Bling ERP", "type": "erp", "api_url": "https://api.bling.com.br/v3", "api_key": "", "description": "Integracao alternativa com Bling (nao configurada)", "active": False, "status": "disconnected", "last_sync": None},
     ])
+
+
+# ============================================================
+# PERSISTENCE LAYER (SQLAlchemy mirror for critical entities)
+# ============================================================
+
+def init_db_schema() -> None:
+    """Create all tables. Idempotent. Called from the lifespan handler."""
+    Base.metadata.create_all(bind=engine)
+
+
+def _user_dict_from_row(row: UserRow) -> dict:
+    return {
+        "id": row.id, "email": row.email, "name": row.name, "cpf": row.cpf,
+        "phone": row.phone, "password_hash": row.password_hash, "role": row.role,
+        "status": row.status, "store_cnpj": row.store_cnpj, "points": row.points,
+        "level": row.level, "total_orders": row.total_orders,
+        "total_order_value": row.total_order_value,
+        "challenges_completed": row.challenges_completed,
+        "receipts_count": row.receipts_count,
+        "lgpd_consent": row.lgpd_consent,
+        "lgpd_consent_date": row.lgpd_consent_date.isoformat() if row.lgpd_consent_date else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _store_dict_from_row(row: StoreRow) -> dict:
+    return {
+        "cnpj": row.cnpj, "name": row.name, "address": row.address,
+        "city": row.city, "state": row.state, "phone": row.phone,
+        "vendedor_ruby_id": row.vendedor_ruby_id, "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _order_dict_from_row(row: OrderRow) -> dict:
+    return {
+        "id": row.id, "user_id": row.user_id, "store_cnpj": row.store_cnpj,
+        "store_name": row.store_name, "items": row.items or [],
+        "total_value": row.total_value, "points_earned": row.points_earned,
+        "status": row.status, "vendedor_ruby_id": row.vendedor_ruby_id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def hydrate_from_db() -> None:
+    """Fill in-memory dicts/lists with whatever is on disk. Called once at startup."""
+    with SessionLocal() as s:
+        for row in s.execute(select(UserRow)).scalars():
+            users_db[row.email] = _user_dict_from_row(row)
+        for row in s.execute(select(StoreRow)).scalars():
+            stores_db[row.cnpj] = _store_dict_from_row(row)
+        for row in s.execute(select(OrderRow)).scalars():
+            orders_db.append(_order_dict_from_row(row))
+        for row in s.execute(select(LgpdConsentRow)).scalars():
+            lgpd_consents_db[row.user_email] = {
+                "consent_data_collection": row.consent_data_collection,
+                "consent_marketing": row.consent_marketing,
+                "consent_third_party": row.consent_third_party,
+                "consented_at": row.consented_at.isoformat() if row.consented_at else None,
+            }
+
+
+def save_user(email: str) -> None:
+    """Upsert the in-memory user dict at `email` to the users table."""
+    user = users_db.get(email)
+    if not user:
+        return
+    with SessionLocal() as s:
+        row = s.get(UserRow, user["id"]) or UserRow(id=user["id"])
+        for k in (
+            "email", "name", "cpf", "phone", "password_hash", "role", "status",
+            "store_cnpj", "points", "level", "total_orders", "total_order_value",
+            "challenges_completed", "receipts_count", "lgpd_consent",
+        ):
+            if k in user:
+                setattr(row, k, user[k])
+        if user.get("lgpd_consent_date"):
+            row.lgpd_consent_date = datetime.fromisoformat(user["lgpd_consent_date"])
+        if user.get("created_at"):
+            row.created_at = datetime.fromisoformat(user["created_at"])
+        s.merge(row) if row.id else s.add(row)
+        s.commit()
+
+
+def delete_user_by_email(email: str) -> None:
+    user = users_db.pop(email, None)
+    if not user:
+        return
+    with SessionLocal() as s:
+        row = s.get(UserRow, user["id"])
+        if row:
+            s.delete(row)
+            s.commit()
+
+
+def save_store(cnpj: str) -> None:
+    store = stores_db.get(cnpj)
+    if not store:
+        return
+    with SessionLocal() as s:
+        row = s.get(StoreRow, cnpj) or StoreRow(cnpj=cnpj)
+        for k in ("name", "address", "city", "state", "phone", "vendedor_ruby_id", "status"):
+            if k in store and store[k] is not None:
+                setattr(row, k, store[k])
+        if store.get("created_at"):
+            row.created_at = datetime.fromisoformat(store["created_at"])
+        s.merge(row) if row.cnpj else s.add(row)
+        s.commit()
+
+
+def save_order(order: dict) -> None:
+    """Upsert an order dict to the orders table. Caller mutates orders_db separately."""
+    with SessionLocal() as s:
+        row = s.get(OrderRow, order["id"]) or OrderRow(id=order["id"])
+        for k in (
+            "user_id", "store_cnpj", "store_name", "items", "total_value",
+            "points_earned", "status", "vendedor_ruby_id",
+        ):
+            if k in order:
+                setattr(row, k, order[k])
+        for k in ("created_at", "updated_at"):
+            if order.get(k):
+                setattr(row, k, datetime.fromisoformat(order[k]))
+        s.merge(row) if row.id else s.add(row)
+        s.commit()
+
+
+def save_lgpd_consent(email: str, consent: dict) -> None:
+    with SessionLocal() as s:
+        row = s.get(LgpdConsentRow, email) or LgpdConsentRow(user_email=email)
+        row.consent_data_collection = consent.get("consent_data_collection", False)
+        row.consent_marketing = consent.get("consent_marketing", False)
+        row.consent_third_party = consent.get("consent_third_party", False)
+        if consent.get("consented_at"):
+            row.consented_at = datetime.fromisoformat(consent["consented_at"])
+        s.merge(row) if row.user_email else s.add(row)
+        s.commit()
+
+
+def reset_db_for_tests() -> None:
+    """Drop and recreate all tables. ONLY used by the pytest fixtures."""
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)

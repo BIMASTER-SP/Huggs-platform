@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import create_token, require_auth, safe_user_response
 from app.config import settings
-from app.database import stores_db, users_db
+from app.database import save_user, stores_db, users_db
 from app.logger import log_activity
 from app.models import LoginRequest, RegisterRequest
 from app.rate_limit import limiter
@@ -40,6 +40,7 @@ def register(request: Request, req: RegisterRequest):
         "lgpd_consent": False, "lgpd_consent_date": None,
     }
     users_db[req.email] = user
+    save_user(req.email)
     token = create_token(user_id, req.email, req.role)
     log_activity("system", "System", "user_register", f"Novo usuario: {req.name} ({req.email})", module="auth")
     return success_response(
