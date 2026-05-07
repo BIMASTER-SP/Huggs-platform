@@ -6,12 +6,11 @@ import MainApp from './MainApp'
 /**
  * Top-level router shell.
  *
- * Today MainApp is still a monolith with its own internal page state machine.
- * This shell separates the only meaningful URL boundary that exists right now:
- * `/login` is its own page, everything else goes through MainApp behind ProtectedRoute.
- *
- * Subsequent PRs will progressively pull pages out of MainApp and give them
- * real routes (e.g. `/`, `/catalogo`, `/pedidos`, `/admin/*`).
+ * `/login` is its own route. Everything else (user pages and admin sub-pages)
+ * is rendered through MainApp behind ProtectedRoute. MainApp itself derives
+ * the current "page" discriminator from `useLocation()` via `lib/routes.ts`,
+ * so navigation now uses real URLs (deep-linkable, refresh-safe, browser
+ * back/forward works).
  */
 function App() {
   return (
