@@ -1,0 +1,22 @@
+# Common
+.git
+.github
+.idea
+.vscode
+*.md
+!README.md
+
+# Backend
+rubyrose-backend/.venv
+rubyrose-backend/.pytest_cache
+rubyrose-backend/.ruff_cache
+rubyrose-backend/__pycache__
+rubyrose-backend/**/__pycache__
+rubyrose-backend/.env
+rubyrose-backend/uploads
+rubyrose-backend/*.db
+
+# Frontend
+rubyrose-frontend/node_modules
+rubyrose-frontend/dist
+rubyrose-frontend/.env

@@ -1,15 +1,17 @@
+import type { ComponentType } from 'react'
 import { ChevronRight, MapPin, ShoppingCart, Trophy, Gift, Package, Check, Target } from 'lucide-react'
 import type { Page } from '@/MainApp'
+import type { Banner, Challenge, DashboardData, Order, OrderStatus, User } from '@/lib/types'
 
 interface Props {
-  user: any
-  dashboard: any
+  user: User | null
+  dashboard: DashboardData | null
   currentBanner: number
-  statusColors: Record<string, string>
-  statusLabels: Record<string, string>
-  statusIcons: Record<string, any>
+  statusColors: Record<OrderStatus | string, string>
+  statusLabels: Record<OrderStatus | string, string>
+  statusIcons: Record<OrderStatus | string, ComponentType<{ className?: string }>>
   setPage: (page: Page) => void
-  setShowOrderDetail: (order: any) => void
+  setShowOrderDetail: (order: Order | null) => void
   setShowRewardKits: (open: boolean) => void
 }
 
@@ -64,9 +66,9 @@ export function HomePage({ user, dashboard, currentBanner, statusColors, statusL
           </div>
         </div>
 
-        {dashboard?.banners?.length > 0 && (
+        {dashboard?.banners && dashboard.banners.length > 0 && (
           <div className="relative overflow-hidden rounded-2xl">
-            {dashboard.banners.map((b: any, i: number) => (
+            {dashboard.banners.map((b: Banner, i: number) => (
               <div key={b.id} className={`transition-all duration-500 ${i === currentBanner ? 'block' : 'hidden'}`}>
                 <div className="relative h-32 rounded-2xl overflow-hidden" style={{ background: bannerBg(b.color) }}>
                   <div className="p-4 h-full flex flex-col justify-center">
@@ -81,7 +83,7 @@ export function HomePage({ user, dashboard, currentBanner, statusColors, statusL
               </div>
             ))}
             <div className="flex justify-center gap-1.5 mt-2">
-              {dashboard.banners.map((_: any, i: number) => (
+              {dashboard.banners.map((_b, i) => (
                 <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentBanner ? 'bg-white w-4' : 'bg-white/40'}`} />
               ))}
             </div>
@@ -102,7 +104,7 @@ export function HomePage({ user, dashboard, currentBanner, statusColors, statusL
         </div>
       </div>
 
-      {dashboard?.active_challenges?.length > 0 && (
+      {dashboard && dashboard.active_challenges && dashboard.active_challenges.length > 0 && (
         <div className="px-4 mt-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-gray-800 text-sm">Desafios Ativos</h3>
@@ -111,18 +113,18 @@ export function HomePage({ user, dashboard, currentBanner, statusColors, statusL
             </button>
           </div>
           <div className="space-y-2">
-            {dashboard.active_challenges.slice(0, 2).map((c: any) => (
+            {dashboard.active_challenges.slice(0, 2).map((c: Challenge) => (
               <div key={c.id} className="bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.progress >= c.goal ? 'bg-green-100' : 'bg-purple-100'}`}>
-                  {c.progress >= c.goal ? <Check className="w-5 h-5 text-green-600" /> : <Target className="w-5 h-5 text-purple-600" />}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${(c.progress ?? 0) >= c.goal ? 'bg-green-100' : 'bg-purple-100'}`}>
+                  {(c.progress ?? 0) >= c.goal ? <Check className="w-5 h-5 text-green-600" /> : <Target className="w-5 h-5 text-purple-600" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 truncate">{c.title}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${Math.min(100, (c.progress / c.goal) * 100)}%` }} />
+                      <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${Math.min(100, ((c.progress ?? 0) / c.goal) * 100)}%` }} />
                     </div>
-                    <span className="text-[10px] text-gray-500">{c.progress}/{c.goal}</span>
+                    <span className="text-[10px] text-gray-500">{c.progress ?? 0}/{c.goal}</span>
                   </div>
                 </div>
                 <span className="text-xs font-bold text-yellow-600">{c.points_reward}pts</span>
@@ -132,7 +134,7 @@ export function HomePage({ user, dashboard, currentBanner, statusColors, statusL
         </div>
       )}
 
-      {dashboard?.recent_orders?.length > 0 && (
+      {dashboard && dashboard.recent_orders && dashboard.recent_orders.length > 0 && (
         <div className="px-4 mt-5 pb-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-gray-800 text-sm">Ultimos Pedidos</h3>
@@ -141,7 +143,7 @@ export function HomePage({ user, dashboard, currentBanner, statusColors, statusL
             </button>
           </div>
           <div className="space-y-2">
-            {dashboard.recent_orders.map((o: any) => {
+            {dashboard.recent_orders.map((o: Order) => {
               const Icon = statusIcons[o.status] || Package
               return (
                 <button key={o.id} onClick={() => setShowOrderDetail(o)} className="w-full bg-white rounded-xl border border-gray-100 p-3 flex items-center gap-3 text-left">

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_auth, require_role
-from app.database import CATALOG_PRODUCTS, orders_db, stores_db
+from app.database import CATALOG_PRODUCTS, orders_db, save_order, save_user, stores_db
 from app.logger import log_activity
 from app.models import CreateOrderRequest
 from app.responses import apply_pagination, paginated_response, success_response
@@ -63,6 +63,8 @@ def create_order(req: CreateOrderRequest, user: dict = Depends(require_role(["pr
         user["level"] = "Prata"
     else:
         user["level"] = "Bronze"
+    save_order(order)
+    save_user(user["email"])
     log_activity(user["id"], user["name"], "order_create", f"Pedido {order_id} - R${total_value}", module="orders")
     return success_response(
         data={"order": order},

@@ -8,23 +8,38 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def tight_client(monkeypatch):
-    """A client whose login limit is 2/minute so tests don't have to spam."""
+    """A client whose login limit is 2/minute so tests don't have to spam.
+
+    The decorator `@limiter.limit(settings.rate_limit_login)` is evaluated when
+    `auth_routes` is first imported, so we have to reload the whole chain
+    (config → rate_limit → routes/auth_routes → main) for the new env to take.
+    """
     monkeypatch.setenv("RATE_LIMIT_LOGIN", "2/minute")
-    # Force re-import so settings re-read env.
     import importlib
 
     import app.config
+    import app.main
     import app.rate_limit
+    import app.routes.auth_routes
     importlib.reload(app.config)
     importlib.reload(app.rate_limit)
-    import app.main
+    importlib.reload(app.routes.auth_routes)
     importlib.reload(app.main)
 
     from app import database
-    for store in (database.users_db, database.stores_db):
-        store.clear()
-    for store in (database.orders_db, database.CATALOG_PRODUCTS, database.banners_db, database.challenges_db, database.reward_kits_db, database.admin_stock_db, database.admin_images_db, database.admin_integrations_db):
-        store.clear()
+    for store_name in (
+        "users_db", "stores_db", "lgpd_consents_db",
+    ):
+        getattr(database, store_name).clear()
+    for store_name in (
+        "orders_db", "challenges_db", "challenge_submissions_db",
+        "receipts_db", "banners_db", "reward_kits_db", "redemptions_db",
+        "webhooks_db", "integrations_stock_db", "integrations_catalog_db",
+        "integrations_prices_db", "integrations_promotions_db",
+        "admin_stock_db", "admin_images_db", "admin_integrations_db",
+        "activity_logs_db", "CATALOG_PRODUCTS",
+    ):
+        getattr(database, store_name).clear()
     database.seed_data()
 
     if hasattr(app.main.app.state, "limiter"):
@@ -33,7 +48,6 @@ def tight_client(monkeypatch):
     with TestClient(app.main.app) as c:
         yield c
 
-    # Restore standard env for the next test.
     monkeypatch.setenv("RATE_LIMIT_LOGIN", os.environ.get("RATE_LIMIT_LOGIN", "1000/minute"))
 
 

@@ -38,6 +38,13 @@ class Settings(BaseSettings):
 
     allowed_origins: CSVList = Field(default_factory=lambda: ["http://localhost:5173"])
 
+    # Database. SQLite by default (dev / CI), Postgres in prod via DATABASE_URL.
+    database_url: str = "sqlite:///./rubyrose.db"
+    database_echo: bool = False
+
+    # NFe / cupom-fiscal provider — see app/services/nfe.py for impls.
+    nfe_provider: str = "mock"  # "mock" | "meliuz"
+
     log_level: str = "INFO"
 
     rate_limit_default: str = "100/minute"

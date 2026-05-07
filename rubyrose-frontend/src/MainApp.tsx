@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import { ShoppingCart, Package, X, Check, CheckCircle, Truck, Send } from 'lucide-react'
 
 import { API_URL, tokenStorage } from '@/lib/api'
+import { pageFromPath, pathForPage, type Page } from '@/lib/routes'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCart } from '@/contexts/CartContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -40,12 +42,17 @@ const apiFetch = async (path: string, opts?: RequestInit) => {
   return res
 }
 
-export type Page =
-  | 'inicio' | 'catalogo' | 'pedidos' | 'desafios' | 'perfil'
-  | 'admin_dash' | 'admin_users' | 'admin_products' | 'admin_banners' | 'admin_orders'
-  | 'admin_company' | 'admin_logs' | 'admin_stock' | 'admin_images' | 'admin_integrations'
+// Page type re-exported from @/lib/routes for the existing `import type { Page } from '@/MainApp'`
+// call sites in BottomNav, AdminSidebar, etc.
+export type { Page }
 
 function MainApp() {
+  // ----- routing -----
+  const location = useLocation()
+  const navigate = useNavigate()
+  const page: Page = pageFromPath(location.pathname)
+  const setPage = useCallback((p: Page) => navigate(pathForPage(p)), [navigate])
+
   // ----- contexts -----
   const { logout } = useAuth()
   const { showToast } = useToast()
@@ -54,7 +61,6 @@ function MainApp() {
   const { items: cartItems, count: cartCount, clear: clearCart, submit: submitCart } = useCart()
 
   // ----- local state -----
-  const [page, setPage] = useState<Page>('inicio')
   const isLoggedIn = !!tokenStorage.get()
   const [user, setUser] = useState<any>(null)
   const [dashboard, setDashboard] = useState<any>(null)

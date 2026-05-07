@@ -3,7 +3,8 @@ Test fixtures.
 
 Sets a deterministic JWT_SECRET and other env defaults BEFORE the app is imported,
 otherwise pydantic-settings raises on startup. Each test runs against a fresh
-in-memory database (database.py module-level dicts are reseeded between tests).
+in-memory SQLite database (DATABASE_URL=sqlite:///:memory:) and the in-memory
+dicts are also wiped + reseeded between tests.
 """
 
 import os
@@ -11,6 +12,8 @@ import os
 # Critical: env must be set before app is imported.
 os.environ.setdefault("JWT_SECRET", "test-secret-32-chars-or-more-deterministic-not-prod")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:5173")
+# In-memory SQLite for tests so writes don't pollute the dev rubyrose.db file.
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # Wide rate limits during tests so they don't trip on parallel runs.
 os.environ.setdefault("RATE_LIMIT_DEFAULT", "1000/minute")
 os.environ.setdefault("RATE_LIMIT_LOGIN", "1000/minute")
@@ -23,11 +26,14 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    """Yields a TestClient against a freshly-seeded app."""
+    """Yields a TestClient against a freshly-seeded app + clean SQLite."""
     from app import database
     from app.main import app
 
-    # Reset all in-memory stores and reseed.
+    # Reset SQL tables (drop + recreate).
+    database.reset_db_for_tests()
+
+    # Reset all in-memory stores and reseed (the lifespan fires below will then persist).
     for store in (
         database.users_db, database.stores_db, database.lgpd_consents_db, database.company_settings_db,
     ):
@@ -42,6 +48,12 @@ def client():
     ):
         store.clear()
     database.seed_data()
+    # Mirror the seed to the empty DB so subsequent restarts (in tests that simulate it)
+    # would see the same data.
+    for cnpj in list(database.stores_db):
+        database.save_store(cnpj)
+    for email in list(database.users_db):
+        database.save_user(email)
 
     # Reset slowapi limiter state so request counts don't leak between tests.
     if hasattr(app.state, "limiter"):

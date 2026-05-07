@@ -37,6 +37,7 @@ Migration path to AWS:
 
 import os
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,18 +48,55 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
-from app.database import seed_data
+from app.database import (
+    flush_all_to_db,
+    hydrate_from_db,
+    init_db_schema,
+    save_store,
+    save_user,
+    seed_data,
+    stores_db,
+    users_db,
+)
 from app.logger import get_logger, log_system_event
 from app.rate_limit import limiter
 from app.responses import error_response, success_response
 
+
 # ============================================================
 # APP SETUP
 # ============================================================
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Startup/shutdown hook — replaces the deprecated `@app.on_event`.
+
+    Boot order:
+      1. Create DB schema if missing (idempotent).
+      2. Hydrate in-memory dicts from DB.
+      3. If DB is empty (first boot), seed the demo data and persist it.
+    """
+    init_db_schema()
+    hydrate_from_db()
+    if not users_db:
+        seed_data()
+        # Persist the full seed snapshot so the next boot reads from DB.
+        for cnpj in list(stores_db):
+            save_store(cnpj)
+        for email in list(users_db):
+            save_user(email)
+        flush_all_to_db()
+    log_system_event("app_startup", "Ruby Rose B2B API v4.0 iniciada - Arquitetura modular")
+    yield
+    # Graceful shutdown — snapshot every in-memory collection back to disk so
+    # admin mutations during the session aren't lost.
+    flush_all_to_db()
+
+
 app = FastAPI(
     title="Ruby Rose B2B API",
     version="4.0.0",
     description="API profissional para plataforma B2B Ruby Rose - Arquitetura modular preparada para AWS.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -180,11 +218,4 @@ def root():
     )
 
 
-# ============================================================
-# STARTUP: Seed database
-# ============================================================
-@app.on_event("startup")
-def on_startup():
-    seed_data()
-    log_system_event("app_startup", "Ruby Rose B2B API v4.0 iniciada - Arquitetura modular")
-    logger.info("Application started with modular architecture")
+# Startup logic moved to the `lifespan` context manager at the top of this module.
